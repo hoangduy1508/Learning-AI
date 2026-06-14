@@ -1,6 +1,6 @@
 # AI Integration Learning Plan
 
-> File context dài hạn cho lộ trình học AI Integration dành cho Senior Fullstack Developer có nền tảng Angular + FastAPI.
+> File context dài hạn cho lộ trình học AI Integration dành cho Senior Fullstack Developer sử dụng TypeScript end-to-end với ReactJS + Node.js.
 
 ## Cách sử dụng file này
 
@@ -20,7 +20,7 @@ Quy ước tiến độ:
 ## Learner Profile
 
 - Vai trò mục tiêu: Senior Fullstack Developer có khả năng xây dựng sản phẩm AI production-ready
-- Nền tảng chính: Angular, FastAPI, Python, TypeScript
+- Nền tảng chính: ReactJS, Node.js và TypeScript
 - Thời gian dự kiến: 12 tuần
 - Cường độ: 12-15 giờ mỗi tuần
 - Trọng tâm: AI Integration, RAG, Agent, MCP, System Design, Security
@@ -48,7 +48,7 @@ Sau lộ trình này, cần có khả năng:
 3. AI System Design và Security
 4. Agent và Tool Calling
 5. MCP
-6. Framework như LangGraph, LangChain, CrewAI
+6. Framework như LangGraph.js và LangChain.js
 
 Nguyên tắc: học API và kiến trúc nguyên bản trước, framework sau.
 
@@ -56,25 +56,29 @@ Nguyên tắc: học API và kiến trúc nguyên bản trước, framework sau.
 
 ### Frontend
 
-- Angular
+- ReactJS
 - TypeScript
-- Streaming qua `fetch`, SSE hoặc RxJS
+- Vite
+- React Router
+- TanStack Query cho server state khi phù hợp
+- Streaming qua `fetch`, SSE hoặc `ReadableStream`
 - Markdown rendering và syntax highlighting
 
 ### Backend
 
-- Python
-- FastAPI
-- Pydantic
-- SQLAlchemy
-- Alembic
+- Node.js
+- TypeScript
+- Fastify
+- Zod
+- Drizzle ORM
+- PostgreSQL migration bằng Drizzle Kit
 
 ### AI
 
 - OpenAI Responses API làm provider đầu tiên
-- Google Gemini API và Anthropic API để học provider abstraction
-- LangGraph cho workflow/agent có state
-- MCP Python SDK
+- Google Gemini API, OpenAI API và sau đó Anthropic API để học provider abstraction
+- LangGraph.js cho workflow/agent có state
+- MCP TypeScript SDK
 
 ### Data và Infrastructure
 
@@ -82,7 +86,7 @@ Nguyên tắc: học API và kiến trúc nguyên bản trước, framework sau.
 - pgvector
 - Redis khi cần caching/rate limiting
 - Docker Compose
-- pytest
+- Node.js test runner (`node:test`)
 
 ## Kế hoạch 12 tuần
 
@@ -90,21 +94,21 @@ Nguyên tắc: học API và kiến trúc nguyên bản trước, framework sau.
 
 Kiến thức:
 
-- [ ] Hiểu token, tokenizer và context window
-- [ ] Hiểu system instruction, user input và model output
-- [ ] Hiểu temperature, output limit và stop condition
-- [ ] Quản lý API key bằng environment variable
-- [ ] Đọc token usage, latency và ước tính cost
-- [ ] Phân biệt model, API và provider
+- [x] Hiểu token, tokenizer và context window
+- [x] Hiểu system instruction, user input và model output
+- [x] Hiểu temperature, output limit và stop condition
+- [x] Quản lý API key bằng environment variable
+- [x] Đọc token usage, latency và ước tính cost
+- [x] Phân biệt model, API và provider
 
 Thực hành:
 
-- [ ] Tạo FastAPI project có cấu trúc rõ ràng
-- [ ] Tạo endpoint `POST /api/chat`
-- [ ] Gọi OpenAI từ backend
-- [ ] Không để API key hoặc provider credential trong Angular
-- [ ] Ghi log model, latency, input token và output token
-- [ ] Viết unit test cho service gọi LLM bằng mock
+- [x] Tạo Node.js + TypeScript project có cấu trúc rõ ràng
+- [x] Tạo endpoint `POST /api/chat`
+- [x] Gọi LLM provider thật từ backend (Gemini Free Tier)
+- [x] Không để API key hoặc provider credential trong ReactJS
+- [x] Ghi log model, latency, input token và output token
+- [x] Viết unit test cho service gọi LLM bằng mock
 
 Definition of Done:
 
@@ -124,10 +128,10 @@ Kiến thức:
 
 Thực hành:
 
-- [ ] Stream output từ provider qua FastAPI
-- [ ] Angular hiển thị từng phần của câu trả lời
+- [ ] Stream output từ provider qua Fastify
+- [ ] ReactJS hiển thị từng phần của câu trả lời
 - [ ] Thêm nút Stop generating
-- [ ] Abort request khi component bị destroy
+- [ ] Abort request trong cleanup của `useEffect` hoặc khi người dùng bấm Stop
 - [ ] Xử lý loading, partial output và error state
 - [ ] Test parser với chunk bị chia ở vị trí bất kỳ
 
@@ -149,7 +153,7 @@ Kiến thức:
 
 Thực hành:
 
-- [ ] Parse structured output bằng Pydantic
+- [ ] Parse structured output bằng Zod
 - [ ] Tạo tool thời tiết giả lập
 - [ ] Tạo tool đọc trạng thái đơn hàng
 - [ ] Tạo tool tạo support ticket
@@ -288,7 +292,7 @@ Definition of Done:
 - Tool call thất bại có trạng thái và thông báo rõ ràng.
 - Có thể giải thích khi nào không nên dùng agent.
 
-### Tuần 9: LangGraph
+### Tuần 9: LangGraph.js
 
 Kiến thức:
 
@@ -300,7 +304,7 @@ Kiến thức:
 
 Thực hành:
 
-- [ ] Chuyển agent loop sang LangGraph
+- [ ] Chuyển agent loop sang LangGraph.js
 - [ ] Tạo bước classify, retrieve, choose tool và answer
 - [ ] Thêm approval trước write action
 - [ ] Persist state để resume workflow
@@ -325,7 +329,7 @@ Kiến thức:
 
 Thực hành:
 
-- [ ] Viết MCP server bằng Python
+- [ ] Viết MCP server bằng TypeScript
 - [ ] Expose một read-only database tool
 - [ ] Expose tài liệu nội bộ dưới dạng resource
 - [ ] Validate mọi tool input
@@ -397,8 +401,8 @@ Definition of Done:
 
 Tính năng bắt buộc:
 
-- Angular chat UI
-- FastAPI backend
+- ReactJS chat UI
+- Node.js + TypeScript backend
 - Streaming response
 - Conversation persistence
 - Structured output
@@ -426,9 +430,9 @@ Tính năng bắt buộc:
 
 Tính năng bắt buộc:
 
-- Angular + FastAPI
+- ReactJS + Node.js, toàn bộ dùng TypeScript
 - RAG có citation
-- LangGraph workflow
+- LangGraph.js workflow
 - MCP tools/resources
 - Human approval cho write action
 - Role-based access control
@@ -440,13 +444,13 @@ Tính năng bắt buộc:
 ## Kiến trúc Capstone dự kiến
 
 ```text
-Angular
+ReactJS
    |
-FastAPI API Gateway
+Node.js / Fastify API Gateway
    |-- Authentication / Authorization
    |-- Rate Limiting
    |-- Conversation Service
-   |-- LangGraph Workflow
+   |-- LangGraph.js Workflow
           |-- RAG / pgvector
           |-- MCP Client / Tools
           |-- Internal APIs
@@ -517,15 +521,15 @@ Observability / Evaluation / Cost Tracking
 - Anthropic API: <https://platform.claude.com/docs/>
 - MCP: <https://modelcontextprotocol.io/docs/>
 - pgvector: <https://github.com/pgvector/pgvector>
-- LangGraph: <https://docs.langchain.com/oss/python/langgraph/overview>
+- LangGraph.js: <https://docs.langchain.com/oss/javascript/langgraph/overview>
 - OWASP GenAI Security: <https://genai.owasp.org/>
 
 ## Current Progress
 
-- Current phase: Chưa bắt đầu
-- Current week: Tuần 1
-- Current task: Khởi tạo FastAPI project và gọi LLM API lần đầu
-- Blockers: Chưa có
+- Current phase: Xây dựng streaming chat
+- Current week: Tuần 2
+- Current task: Hiểu HTTP streaming, so sánh SSE/WebSocket/streaming fetch và thiết kế stream event contract
+- Blockers: Không có blocker cho Gemini; OpenAI vẫn trả `429 insufficient_quota` nhưng không cản lộ trình
 - Last updated: 2026-06-13
 
 ## Progress Log
@@ -533,8 +537,80 @@ Observability / Evaluation / Cost Tracking
 ### 2026-06-13
 
 - Tạo lộ trình học 12 tuần.
-- Chọn Angular + FastAPI + PostgreSQL/pgvector làm stack chính.
+- Chọn ReactJS + FastAPI + PostgreSQL/pgvector làm stack chính.
 - Xác định ba dự án portfolio: Streaming Chat, Secure RAG PDF Assistant và Enterprise AI Assistant.
+- Cài Python 3.13.5 và tạo virtual environment tại `backend/.venv`.
+- Tạo FastAPI project với provider abstraction, fake provider và OpenAI Responses API adapter.
+- Tạo `POST /api/chat` và `GET /health`; thêm timeout/error mapping, token usage và latency logging.
+- Thêm `.env.example`, giữ API key ở backend và loại `.env` khỏi Git.
+- Thêm mock tests cho health, chat success, validation và provider failure.
+- Kiểm chứng: `ruff check .` thành công; `pytest -q` có 4 test pass.
+- Chưa gọi OpenAI thật vì môi trường chưa có `OPENAI_API_KEY`.
+- Task tiếp theo: cấu hình API key cục bộ và chạy smoke request thật, sau đó học token/context window dựa trên response usage.
+
+### 2026-06-13 - Chuyển sang TypeScript end-to-end
+
+- Chuyển định hướng frontend và backend sang TypeScript: ReactJS + Node.js.
+- Thay FastAPI/Pydantic bằng Fastify/Zod; giữ nguyên contract `POST /api/chat` và `GET /health`.
+- Thay pytest bằng Node.js test runner và chuyển provider abstraction/OpenAI Responses API adapter sang TypeScript.
+- Cài npm dependencies; `npm run typecheck`, Node.js test runner với 4 test và `npm run build` đều thành công.
+- `npm audit` kiểm tra cả production và development dependencies: không phát hiện lỗ hổng.
+- Production dependency audit: không phát hiện lỗ hổng.
+- Đã chuyển `.env` sang `LLM_PROVIDER=openai` mà không hiển thị hoặc thay đổi API key.
+- OpenAI nhận request nhưng trả `429 insufficient_quota`; cần kích hoạt billing/API credit trước khi hoàn thành smoke test thật.
+- Task tiếp theo: dùng Gemini Free Tier cho bài học hiện tại; chỉ quay lại OpenAI khi có API credit.
+
+### 2026-06-13 - Multi-provider và Gemini
+
+- Thêm Google Gen AI SDK chính thức và `GeminiLlmProvider` bằng TypeScript.
+- Chuẩn hóa `LlmProvider` để fake, OpenAI và Gemini cùng dùng một contract.
+- Factory chọn provider bằng `LLM_PROVIDER`; API route và frontend không phụ thuộc SDK của provider.
+- Response và log có thêm trường `provider` để theo dõi request đang dùng nhà cung cấp nào.
+- Thêm validation riêng cho `OPENAI_API_KEY` và `GEMINI_API_KEY` theo provider được chọn.
+- Thêm mapping cho timeout, rate limit và authentication/permission error của Gemini.
+- Cập nhật `.env.example`, README và chuyển `.env` sang `LLM_PROVIDER=gemini`.
+- Kiểm chứng: typecheck và build thành công, 8 test pass, `npm audit` không phát hiện lỗ hổng.
+- Chưa chạy request Gemini thật vì `GEMINI_API_KEY` trong `.env` đang để trống.
+- Task tiếp theo: dán Gemini key vào `.env`, chạy `/api/chat`, xác nhận provider/model/token usage/latency.
+
+### 2026-06-13 - Gemini smoke test thành công
+
+- Xác nhận `.env` đang chọn `LLM_PROVIDER=gemini` và Gemini key đã được cấu hình.
+- Chạy lại typecheck, build và 8 automated tests: tất cả thành công.
+- `GET /health` trả `ok`; `POST /api/chat` gọi Gemini Free Tier thành công.
+- Provider thực tế: `gemini`; model: `gemini-3.5-flash`; latency đo được khoảng 1430 ms.
+- Usage của smoke request: 26 input tokens, 4 output tokens và 135 total tokens.
+- Bổ sung `thinking_tokens` vào usage response/log để giải thích phần token nội bộ của model.
+- Task tiếp theo: học token/tokenizer/context window và thử các prompt có độ dài khác nhau để so sánh usage.
+
+### 2026-06-13 - Token và context window lab
+
+- Thêm script tái sử dụng `npm run learn:tokens` và tài liệu `backend/docs/TOKENS_AND_CONTEXT.md`.
+- Dùng Gemini `countTokens` để đo input trước request và usage metadata để đo usage thực tế sau request.
+- Model `gemini-3.5-flash` báo input context limit 1,048,576 token và output limit 65,536 token tại thời điểm kiểm tra.
+- Prompt tiếng Anh ngắn: 43 ký tự, 8 từ nhưng 11 token; xác nhận token không đồng nhất với từ hoặc ký tự.
+- Prompt tiếng Việt ngắn: 62 ký tự, 13 từ và 15 token; ngôn ngữ ảnh hưởng tokenization.
+- Prompt chứa TypeScript: 86 ký tự, 15 từ và 26 token; punctuation/code làm thay đổi token count.
+- Prompt dài: 3,516 ký tự, 648 từ và 771 input token; input tăng kéo theo token usage và latency tăng.
+- Billed input cao hơn preflight count 11 token trong mọi mẫu vì request generate có thêm system instruction.
+- Thinking model dùng khoảng 188-190 internal thinking tokens dù visible output chỉ 6-8 token; không thể ước tính total usage chỉ từ text hiển thị.
+- Latency quan sát được khoảng 1.5-2.2 giây; prompt dài nhất chậm hơn các prompt ngắn.
+- Kiểm chứng: typecheck, build và 8 automated tests thành công; token lab chạy 4 request Gemini thật.
+- Task tiếp theo: thử system instruction, temperature và `maxOutputTokens` để hiểu cách chúng kiểm soát hành vi/output.
+
+### 2026-06-13 - Generation controls lab
+
+- Thêm `npm run learn:generation` và tài liệu `backend/docs/GENERATION_CONTROLS.md`.
+- Cùng user prompt, system instruction cho người mới tạo ví dụ nhà hàng; instruction cho senior tập trung contract, boundary và failure mode.
+- Temperature 0 tạo `OmniFind`; hai lần temperature 1.5 tạo `DocuSeek` và `Omni`, xác nhận temperature cao tăng khả năng đa dạng nhưng không phải cam kết determinism.
+- `maxOutputTokens=12` dừng với `MAX_TOKENS` và cắt câu sau 8 output token.
+- `maxOutputTokens=100` vẫn dừng với `MAX_TOKENS` sau 96 output token vì câu trả lời chưa hoàn tất trong budget.
+- Stop sequence `STOP_MARKER` trả visible output `alpha`; marker và phần sau bị loại, finish reason là `STOP`.
+- Tắt thinking trong lab để quan sát output budget trực tiếp; thinking token cần được tính riêng khi bật tự động.
+- Gặp giới hạn Gemini Free Tier 5 request/phút; bổ sung pacing 13 giây và một lần retry sau 429.
+- Kiểm chứng: generation lab hoàn thành 8 request thật; typecheck, build và 8 automated tests thành công.
+- Hoàn thành toàn bộ kiến thức và thực hành Tuần 1.
+- Task tiếp theo: học HTTP streaming và thiết kế stream event contract cho Fastify + ReactJS.
 
 ## Session Notes Template
 

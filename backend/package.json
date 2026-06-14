@@ -1,0 +1,30 @@
+{
+  "name": "ai-learning-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "learn:tokens": "tsx src/scripts/token-lab.ts",
+    "learn:generation": "tsx src/scripts/generation-lab.ts",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "node --import tsx --test tests/app.test.ts tests/config.test.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "dotenv": "^16.5.0",
+    "fastify": "^5.3.0",
+    "openai": "^5.0.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}
