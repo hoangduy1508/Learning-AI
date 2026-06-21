@@ -4,7 +4,7 @@ import { createLlmProvider } from "./providers/index.js";
 
 const config = loadConfig();
 const provider = createLlmProvider(config);
-const app = buildApp(provider);
+const app = buildApp(provider, config);
 
 try {
   await app.listen({ host: config.HOST, port: config.PORT });

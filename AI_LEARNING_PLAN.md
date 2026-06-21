@@ -120,20 +120,20 @@ Definition of Done:
 
 Kiến thức:
 
-- [ ] Hiểu HTTP streaming
-- [ ] So sánh SSE, WebSocket và streaming `fetch`
-- [ ] Hiểu event/chunk/delta
-- [ ] Hiểu perceived latency và total latency
-- [ ] Hiểu cancel, timeout, retry và mất kết nối
+- [x] Hiểu HTTP streaming
+- [x] So sánh SSE, WebSocket và streaming `fetch`
+- [x] Hiểu event/chunk/delta
+- [x] Hiểu perceived latency và total latency
+- [x] Hiểu cancel, timeout, retry và mất kết nối
 
 Thực hành:
 
-- [ ] Stream output từ provider qua Fastify
-- [ ] ReactJS hiển thị từng phần của câu trả lời
-- [ ] Thêm nút Stop generating
-- [ ] Abort request trong cleanup của `useEffect` hoặc khi người dùng bấm Stop
-- [ ] Xử lý loading, partial output và error state
-- [ ] Test parser với chunk bị chia ở vị trí bất kỳ
+- [x] Stream output từ provider qua Fastify
+- [x] ReactJS hiển thị từng phần của câu trả lời
+- [x] Thêm nút Stop generating
+- [x] Abort request trong cleanup của `useEffect` hoặc khi người dùng bấm Stop
+- [x] Xử lý loading, partial output và error state
+- [x] Test parser với chunk bị chia ở vị trí bất kỳ
 
 Definition of Done:
 
@@ -148,8 +148,8 @@ Kiến thức:
 - [ ] Hiểu JSON Schema
 - [ ] Phân biệt JSON mode và schema-constrained output
 - [ ] Phân biệt structured output và tool calling
-- [ ] Hiểu tool choice, tool arguments và tool result
-- [ ] Không tin tưởng dữ liệu do model tạo ra
+- [x] Hiểu tool choice, tool arguments và tool result
+- [~] Không tin tưởng dữ liệu do model tạo ra
 
 Thực hành:
 
@@ -158,7 +158,7 @@ Thực hành:
 - [ ] Tạo tool đọc trạng thái đơn hàng
 - [ ] Tạo tool tạo support ticket
 - [ ] Validate authorization trước khi gọi tool
-- [ ] Yêu cầu confirmation trước write action
+- [x] Yêu cầu confirmation trước write action
 - [ ] Test malformed arguments và unauthorized call
 
 Definition of Done:
@@ -526,11 +526,11 @@ Observability / Evaluation / Cost Tracking
 
 ## Current Progress
 
-- Current phase: Xây dựng streaming chat
-- Current week: Tuần 2
-- Current task: Hiểu HTTP streaming, so sánh SSE/WebSocket/streaming fetch và thiết kế stream event contract
-- Blockers: Không có blocker cho Gemini; OpenAI vẫn trả `429 insufficient_quota` nhưng không cản lộ trình
-- Last updated: 2026-06-13
+- Current phase: Structured Output và Tool Calling
+- Current week: Tuần 3
+- Current task: Manual QA File Agent auto-apply với thư mục học tập an toàn, sau đó thêm audit log cho tool call
+- Blockers: In-app Browser không khởi động được trong sandbox hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete đã được bật theo yêu cầu người dùng nên chỉ dùng với thư mục được allowlist và dữ liệu học tập
+- Last updated: 2026-06-18
 
 ## Progress Log
 
@@ -611,6 +611,75 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: generation lab hoàn thành 8 request thật; typecheck, build và 8 automated tests thành công.
 - Hoàn thành toàn bộ kiến thức và thực hành Tuần 1.
 - Task tiếp theo: học HTTP streaming và thiết kế stream event contract cho Fastify + ReactJS.
+
+### 2026-06-18 - Backend streaming và event contract
+
+- Thiết kế stream event contract gồm `start`, `delta`, `usage`, `end`, `error`.
+- Thêm `LlmProvider.stream()` để route không phụ thuộc trực tiếp SDK của Gemini/OpenAI.
+- Thêm `POST /api/chat/stream` trả `text/event-stream` qua Fastify.
+- Gemini dùng `generateContentStream`; fake/OpenAI có stream adapter tương thích contract.
+- Thêm `StreamEventParser` để client buffer event theo boundary `\\n\\n` thay vì giả định network chunk là event hoàn chỉnh.
+- Thêm test parser với chunk bị chia tùy ý, test route streaming thành công và test error event.
+- Chuyển model lab sang `gemini-2.5-flash` vì `gemini-3.5-flash` trả `503 UNAVAILABLE` khi high demand; model 2.5 streaming ổn định hơn cho bài học.
+- Smoke test thật qua `/api/chat/stream` thành công với event `start -> delta -> usage -> end`.
+- Usage smoke test: provider `gemini`, model `gemini-2.5-flash`, 26 input tokens, 4 output tokens, 65 thinking tokens, 95 total tokens, latency khoảng 1117 ms.
+- Thêm tài liệu song ngữ `backend/docs/STREAMING_CHAT.md`.
+- Kiểm chứng: typecheck, build và 11 automated tests thành công.
+- Task tiếp theo: tạo ReactJS UI đọc streaming `fetch`, hiển thị delta và thêm Stop generating bằng `AbortController`.
+
+### 2026-06-18 - React streaming UI
+
+- Tạo frontend ReactJS + TypeScript bằng Vite tại `frontend/`.
+- Thêm UI chat streaming với textarea, nút Send, nút Stop generating, trạng thái `idle/streaming/done/error/stopped`, output partial và usage metrics.
+- Dùng `fetch` POST tới `/api/chat/stream`, đọc `ReadableStream`, decode chunk bằng `TextDecoder` và parse event bằng `StreamEventParser`.
+- Dùng `AbortController` để hủy request khi người dùng bấm Stop; cùng pattern này sẽ dùng cho cleanup khi component unmount ở bước polish sau.
+- Thêm Vite dev proxy `/api -> http://127.0.0.1:8000` để frontend không cần biết API key và không cần CORS trong dev.
+- Thêm frontend tests cho parser khi chunk bị chia tùy ý, `streamChat` nhận stream event và non-2xx error.
+- Cập nhật README root và thêm `frontend/README.md` với cách chạy backend/frontend.
+- Kiểm chứng frontend: typecheck thành công, 3 automated tests pass, production build thành công, production dependency audit không phát hiện lỗ hổng.
+- Kiểm chứng backend lại: typecheck thành công, 11 automated tests pass, build thành công.
+- Visual QA bằng in-app Browser chưa thực hiện được vì Browser runtime lỗi quyền sandbox; cần kiểm thử thủ công tại `http://127.0.0.1:5173` hoặc chạy lại khi Browser hoạt động.
+- Task tiếp theo: manual/visual QA UI streaming, sau đó bắt đầu lưu conversation history.
+
+### 2026-06-18 - Filesystem tool service cho agent
+
+- Thêm filesystem tool layer trong backend để chuẩn bị cho Agent/Tool Calling.
+- Cấu hình allowlist bằng `FILE_TOOL_ALLOWED_ROOTS`, hiện trỏ tới `E:\Project\3sdesign`.
+- Bật có chủ đích `FILE_TOOL_ALLOW_WRITE=true` và `FILE_TOOL_ALLOW_DELETE=true` theo yêu cầu, nhưng vẫn giới hạn trong allowlist.
+- Thêm các route nền: `GET /api/files/roots`, `POST /api/files/list`, `/read`, `/search`, `/write`, `/delete`.
+- Thêm path guard: mọi path được resolve và phải nằm trong allowed root; path traversal như `..\outside.txt` bị chặn.
+- Write/delete được chặn nếu chưa bật env flag; delete yêu cầu `confirmation: "DELETE"` và không cho xóa chính allowed root.
+- Sửa lỗi bảo mật trong config: không dùng `z.coerce.boolean()` cho env boolean vì chuỗi `"false"` có thể bị hiểu thành truthy.
+- Thêm tests filesystem: list/read/search, chặn path ngoài root, chặn write khi chưa bật, write/delete khi bật.
+- Xác minh thực tế bằng Fastify inject: backend thấy root `E:\Project\3sdesign`, write/delete enabled và list root trả 24 entries.
+- Thêm tài liệu song ngữ `backend/docs/FILESYSTEM_TOOLS.md`.
+- Kiểm chứng: backend typecheck, 15 automated tests và build đều thành công.
+- Task tiếp theo: expose các filesystem operations này thành LLM tools để model có thể đề xuất `list/read/search/write/delete`, nhưng backend vẫn giữ quyền thực thi và confirmation.
+
+### 2026-06-18 - File Agent UI cho tool calling
+
+- Thêm UI tab `File Agent` trong React app bên cạnh tab `Streaming Chat`.
+- Thêm frontend API helper `frontend/src/api/file-agent.ts` cho `POST /api/agent/chat`, `GET /api/agent/pending` và `POST /api/agent/approve`.
+- UI File Agent cho phép nhập prompt, chạy agent, xem answer, xem tool calls, xem pending write/delete actions và approve action trực tiếp.
+- Pending panel hiển thị `toolName`, thời điểm tạo, arguments JSON và nút `Approve` để thực thi action đã được backend giữ lại.
+- Giữ human-in-the-loop cho write/delete: LLM chỉ đề xuất action, backend tạo pending action, người dùng duyệt trên UI rồi mới thực thi.
+- Thêm tests frontend cho file-agent API helper: chat, pending list, approve và backend detail error.
+- Kiểm chứng frontend: `npm run typecheck` thành công, `npm test` 7 tests pass, `npm run build` thành công.
+- Visual QA bằng in-app Browser vẫn chưa thực hiện được vì Browser runtime lỗi quyền sandbox `CreateProcessAsUserW failed: 5`.
+- Lưu ý bảo mật: khi dùng Gemini agent thật, tool result như tên file, search result hoặc nội dung file có thể được gửi tới Gemini; chỉ nên test với thư mục học tập hoặc dữ liệu được phép chia sẻ.
+- Task tiếp theo: chạy manual QA bằng backend + frontend local, thử một prompt tạo file nhỏ, approve trên UI, rồi thêm audit log cho tool call.
+
+### 2026-06-18 - Bật File Agent auto-apply write/delete
+
+- Thêm cấu hình `FILE_AGENT_AUTO_APPLY_WRITES` vào backend config, `.env.example` và bật `true` trong `.env` local theo yêu cầu người dùng.
+- Khi auto-apply bật, tool `write_file` và `delete_file` được thực thi ngay trong agent loop thay vì tạo pending action chờ approve.
+- Vẫn giữ rào chắn `FILE_TOOL_ALLOWED_ROOTS`, `FILE_TOOL_ALLOW_WRITE`, `FILE_TOOL_ALLOW_DELETE`, `FILE_TOOL_MAX_FILE_BYTES` và path traversal guard; agent không được ghi/xóa ngoài allowed root.
+- Response `/api/agent/chat` có thêm `executedActions` để frontend hiển thị các file action đã được chạy.
+- UI File Agent hiển thị trạng thái auto-apply và danh sách `Executed actions`; pending panel chỉ còn là fallback nếu tắt auto-apply sau này.
+- Giữ endpoint pending/approve để không phá contract cũ và để dễ quay lại human approval khi cần.
+- Thêm test config xác nhận `FILE_AGENT_AUTO_APPLY_WRITES=true/false` được parse đúng boolean, tránh lỗi chuỗi `"false"` bị hiểu nhầm thành truthy.
+- Kiểm chứng: backend `npm run typecheck`, `npm test` 16 tests pass, backend `npm run build`; frontend `npm run typecheck`, `npm test` 7 tests pass, frontend `npm run build`.
+- Task tiếp theo: manual QA agent auto-apply bằng prompt tạo/sửa/xóa file nhỏ trong thư mục allowlist, sau đó thêm audit log cho mọi tool call.
 
 ## Session Notes Template
 

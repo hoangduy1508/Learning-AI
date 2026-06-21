@@ -1,0 +1,312 @@
+import { randomUUID } from "node:crypto";
+import {
+  FunctionCallingConfigMode,
+  GoogleGenAI,
+  Type,
+  type Content,
+  type FunctionDeclaration
+} from "@google/genai";
+
+import type { AppConfig } from "../config.js";
+import { FileSystemToolService, FileToolError, parseAllowedRoots } from "../filesystem/service.js";
+
+interface PendingAction {
+  id: string;
+  toolName: "write_file" | "delete_file";
+  args: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface ExecutedAction {
+  toolName: "write_file" | "delete_file";
+  args: Record<string, unknown>;
+  result: unknown;
+  executedAt: string;
+}
+
+export interface FileAgentResult {
+  answer: string;
+  toolCalls: Array<{ name: string; args: Record<string, unknown>; result: unknown }>;
+  approvalRequired?: PendingAction;
+  executedActions?: ExecutedAction[];
+}
+
+export class FileAgentService {
+  private readonly client: GoogleGenAI;
+  private readonly files: FileSystemToolService;
+  private readonly pendingActions = new Map<string, PendingAction>();
+
+  constructor(private readonly config: AppConfig) {
+    if (!config.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is required for file agent");
+    }
+    this.client = new GoogleGenAI({
+      apiKey: config.GEMINI_API_KEY,
+      httpOptions: { timeout: config.LLM_TIMEOUT_SECONDS * 1_000 }
+    });
+    this.files = new FileSystemToolService({
+      allowedRoots: parseAllowedRoots(config.FILE_TOOL_ALLOWED_ROOTS),
+      allowWrite: config.FILE_TOOL_ALLOW_WRITE,
+      allowDelete: config.FILE_TOOL_ALLOW_DELETE,
+      maxFileBytes: config.FILE_TOOL_MAX_FILE_BYTES
+    });
+  }
+
+  async chat(message: string): Promise<FileAgentResult> {
+    const toolCalls: FileAgentResult["toolCalls"] = [];
+    const executedActions: ExecutedAction[] = [];
+    const contents: Content[] = [
+      {
+        role: "user",
+        parts: [{ text: message }]
+      }
+    ];
+
+    for (let iteration = 0; iteration < 4; iteration += 1) {
+      const response = await this.client.models.generateContent({
+        model: this.config.GEMINI_MODEL,
+        contents,
+        config: {
+          systemInstruction:
+            this.config.FILE_AGENT_AUTO_APPLY_WRITES
+              ? "You are a cautious filesystem coding assistant. Use tools to inspect files before answering. Write and delete tools execute immediately inside the configured allowed roots. After a write/delete, summarize exactly what changed."
+              : "You are a cautious filesystem coding assistant. Use tools to inspect files before answering. For write_file and delete_file, explain the proposed action and wait for approval; do not claim it was applied.",
+          tools: [{ functionDeclarations: fileToolDeclarations }],
+          toolConfig: {
+            functionCallingConfig: {
+              mode: FunctionCallingConfigMode.AUTO
+            }
+          }
+        }
+      });
+
+      const functionCalls = response.functionCalls ?? [];
+      if (functionCalls.length === 0) {
+        return {
+          answer: response.text ?? "",
+          toolCalls,
+          executedActions
+        };
+      }
+
+      contents.push({
+        role: "model",
+        parts: functionCalls.map((call) => ({ functionCall: call }))
+      });
+
+      const functionResponses = [];
+      for (const call of functionCalls) {
+        const name = call.name ?? "";
+        const args = (call.args ?? {}) as Record<string, unknown>;
+
+        if (name === "write_file" || name === "delete_file") {
+          if (this.config.FILE_AGENT_AUTO_APPLY_WRITES) {
+            const result = await this.executeWriteTool(name, args);
+            const toolName = name;
+            const executedAction: ExecutedAction = {
+              toolName,
+              args,
+              result,
+              executedAt: new Date().toISOString()
+            };
+            executedActions.push(executedAction);
+            toolCalls.push({ name, args, result });
+            functionResponses.push({
+              functionResponse: {
+                name,
+                response: { output: result }
+              }
+            });
+            continue;
+          }
+
+          const pending = this.createPendingAction(name, args);
+          return {
+            answer: `Approval required before ${name}. Review pending action ${pending.id}.`,
+            toolCalls,
+            executedActions,
+            approvalRequired: pending
+          };
+        }
+
+        const result = await this.executeReadOnlyTool(name, args);
+        toolCalls.push({ name, args, result });
+        functionResponses.push({
+          functionResponse: {
+            name,
+            response: { output: result }
+          }
+        });
+      }
+
+      contents.push({
+        role: "user",
+        parts: functionResponses
+      });
+    }
+
+    return {
+      answer: "I stopped because the agent reached the maximum number of tool iterations.",
+      toolCalls,
+      executedActions
+    };
+  }
+
+  listPendingActions(): PendingAction[] {
+    return [...this.pendingActions.values()];
+  }
+
+  async approve(actionId: string): Promise<unknown> {
+    const action = this.pendingActions.get(actionId);
+    if (!action) {
+      throw new FileToolError("Pending action not found", 404);
+    }
+
+    this.pendingActions.delete(actionId);
+
+    if (action.toolName === "write_file") {
+      return await this.files.write(
+        asString(action.args.root),
+        requiredString(action.args.path, "path"),
+        requiredString(action.args.content, "content"),
+        { createDirs: Boolean(action.args.createDirs) }
+      );
+    }
+
+    return await this.files.delete(asString(action.args.root), requiredString(action.args.path, "path"), {
+      recursive: Boolean(action.args.recursive),
+      confirmation: "DELETE"
+    });
+  }
+
+  private createPendingAction(
+    toolName: PendingAction["toolName"],
+    args: Record<string, unknown>
+  ): PendingAction {
+    const action = {
+      id: randomUUID(),
+      toolName,
+      args,
+      createdAt: new Date().toISOString()
+    };
+    this.pendingActions.set(action.id, action);
+    return action;
+  }
+
+  private async executeReadOnlyTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+    if (name === "list_files") {
+      return await this.files.list(asString(args.root), asString(args.path) ?? ".");
+    }
+    if (name === "read_file") {
+      return await this.files.read(asString(args.root), requiredString(args.path, "path"));
+    }
+    if (name === "search_files") {
+      return await this.files.search(asString(args.root), requiredString(args.query, "query"), {
+        relativePath: asString(args.path) ?? ".",
+        limit: typeof args.limit === "number" ? args.limit : 50
+      });
+    }
+
+    throw new FileToolError(`Unknown tool: ${name}`, 400);
+  }
+
+  private async executeWriteTool(
+    name: "write_file" | "delete_file",
+    args: Record<string, unknown>
+  ): Promise<unknown> {
+    if (name === "write_file") {
+      return await this.files.write(
+        asString(args.root),
+        requiredString(args.path, "path"),
+        requiredString(args.content, "content"),
+        { createDirs: Boolean(args.createDirs) }
+      );
+    }
+
+    return await this.files.delete(asString(args.root), requiredString(args.path, "path"), {
+      recursive: Boolean(args.recursive),
+      confirmation: "DELETE"
+    });
+  }
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function requiredString(value: unknown, name: string): string {
+  const result = asString(value);
+  if (!result) {
+    throw new FileToolError(`Missing required argument: ${name}`, 400);
+  }
+  return result;
+}
+
+const fileToolDeclarations: FunctionDeclaration[] = [
+  {
+    name: "list_files",
+    description: "List files and directories inside an allowed root.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        root: { type: Type.STRING },
+        path: { type: Type.STRING }
+      }
+    }
+  },
+  {
+    name: "read_file",
+    description: "Read a UTF-8 text file inside an allowed root.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        root: { type: Type.STRING },
+        path: { type: Type.STRING }
+      },
+      required: ["path"]
+    }
+  },
+  {
+    name: "search_files",
+    description: "Search text inside files under an allowed root.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        root: { type: Type.STRING },
+        path: { type: Type.STRING },
+        query: { type: Type.STRING },
+        limit: { type: Type.INTEGER }
+      },
+      required: ["query"]
+    }
+  },
+  {
+    name: "write_file",
+    description:
+      "Write a UTF-8 text file inside an allowed root. The backend may execute this immediately when auto-apply is enabled.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        root: { type: Type.STRING },
+        path: { type: Type.STRING },
+        content: { type: Type.STRING },
+        createDirs: { type: Type.BOOLEAN }
+      },
+      required: ["path", "content"]
+    }
+  },
+  {
+    name: "delete_file",
+    description:
+      "Delete a file or directory inside an allowed root. The backend may execute this immediately when auto-apply is enabled.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        root: { type: Type.STRING },
+        path: { type: Type.STRING },
+        recursive: { type: Type.BOOLEAN }
+      },
+      required: ["path"]
+    }
+  }
+];

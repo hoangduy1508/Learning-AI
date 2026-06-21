@@ -75,3 +75,13 @@ thinking token, total token và latency. Lệnh này gọi Gemini thật nên s�
 - Theo dõi usage theo từng provider vì mỗi provider có thể báo cáo token khác nhau.
 
 Official reference: <https://ai.google.dev/gemini-api/docs/tokens>
+
+Note: the project currently uses `gemini-2.5-flash` for labs because it is reliable for low-latency
+learning tasks and streaming. You can switch back to a newer model in `.env` when quota and model
+availability are stable.
+
+### Tiếng Việt
+
+Ghi chú: dự án hiện dùng `gemini-2.5-flash` cho các lab vì model này ổn định cho bài học
+low-latency và streaming. Có thể đổi lại model mới hơn trong `.env` khi quota và trạng thái model
+ổn định.

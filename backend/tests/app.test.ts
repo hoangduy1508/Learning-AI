@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 
 import { buildApp } from "../src/app.js";
 import { LlmProviderError, type LlmProvider } from "../src/providers/types.js";
+import { parseStreamEvents } from "../src/streaming/events.js";
 
 const stubProvider: LlmProvider = {
   async generate(message) {
@@ -12,11 +13,25 @@ const stubProvider: LlmProvider = {
       model: "stub-model",
       usage: { inputTokens: 3, outputTokens: 5, totalTokens: 8 }
     };
+  },
+
+  async *stream(message) {
+    yield { type: "metadata" as const, provider: "fake" as const, model: "stub-model" };
+    yield { type: "delta" as const, text: "Stream " };
+    yield { type: "delta" as const, text: `answer: ${message}` };
+    yield {
+      type: "usage" as const,
+      usage: { inputTokens: 4, outputTokens: 6, totalTokens: 10 }
+    };
   }
 };
 
 const failingProvider: LlmProvider = {
   async generate() {
+    throw new LlmProviderError("Provider unavailable");
+  },
+
+  async *stream() {
     throw new LlmProviderError("Provider unavailable");
   }
 };
@@ -59,10 +74,10 @@ describe("AI Learning API", () => {
         usage: body.usage
       },
       {
-      answer: "Answer to: What is a token?",
-      provider: "fake",
-      model: "stub-model",
-      usage: { input_tokens: 3, output_tokens: 5, thinking_tokens: 0, total_tokens: 8 }
+        answer: "Answer to: What is a token?",
+        provider: "fake",
+        model: "stub-model",
+        usage: { input_tokens: 3, output_tokens: 5, thinking_tokens: 0, total_tokens: 8 }
       }
     );
   });
@@ -86,5 +101,42 @@ describe("AI Learning API", () => {
 
     assert.equal(response.statusCode, 502);
     assert.deepEqual(response.json(), { detail: "Provider unavailable" });
+  });
+
+  it("streams chat events", async () => {
+    const response = await createApp(stubProvider).inject({
+      method: "POST",
+      url: "/api/chat/stream",
+      payload: { message: "Hello" }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers["content-type"] as string, /text\/event-stream/);
+
+    const events = parseStreamEvents(response.body);
+    assert.deepEqual(events, [
+      { type: "start", provider: "fake", model: "stub-model" },
+      { type: "delta", text: "Stream " },
+      { type: "delta", text: "answer: Hello" },
+      {
+        type: "usage",
+        usage: { inputTokens: 4, outputTokens: 6, totalTokens: 10 },
+        latencyMs: events[3]?.type === "usage" ? events[3].latencyMs : -1
+      },
+      { type: "end" }
+    ]);
+  });
+
+  it("streams provider errors as error events", async () => {
+    const response = await createApp(failingProvider).inject({
+      method: "POST",
+      url: "/api/chat/stream",
+      payload: { message: "Hello" }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(parseStreamEvents(response.body), [
+      { type: "error", message: "Provider unavailable" }
+    ]);
   });
 });

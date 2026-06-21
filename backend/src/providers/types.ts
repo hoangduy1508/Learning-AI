@@ -14,6 +14,7 @@ export interface LlmResult {
 
 export interface LlmProvider {
   generate(message: string): Promise<LlmResult>;
+  stream(message: string, options?: { signal?: AbortSignal }): AsyncGenerator<LlmStreamEvent>;
 }
 
 export class LlmProviderError extends Error {
@@ -22,3 +23,18 @@ export class LlmProviderError extends Error {
     this.name = "LlmProviderError";
   }
 }
+
+export type LlmStreamEvent =
+  | {
+      type: "metadata";
+      provider: LlmResult["provider"];
+      model: string;
+    }
+  | {
+      type: "delta";
+      text: string;
+    }
+  | {
+      type: "usage";
+      usage: LlmUsage;
+    };

@@ -80,4 +80,70 @@ export class GeminiLlmProvider implements LlmProvider {
       throw new LlmProviderError("The LLM provider request failed", { cause: error });
     }
   }
+
+  async *stream(message: string, options?: { signal?: AbortSignal }) {
+    try {
+      const stream = await this.client.models.generateContentStream({
+        model: this.model,
+        contents: message,
+        config: {
+          systemInstruction:
+            "You are a concise AI learning assistant. Answer in the same language as the user.",
+          abortSignal: options?.signal
+        }
+      });
+
+      yield { type: "metadata" as const, provider: "gemini" as const, model: this.model };
+
+      let usage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        thinkingTokens: 0,
+        totalTokens: 0
+      };
+
+      for await (const chunk of stream) {
+        if (options?.signal?.aborted) {
+          return;
+        }
+        if (chunk.text) {
+          yield { type: "delta" as const, text: chunk.text };
+        }
+
+        const inputTokens = chunk.usageMetadata?.promptTokenCount ?? usage.inputTokens;
+        const outputTokens = chunk.usageMetadata?.candidatesTokenCount ?? usage.outputTokens;
+        const thinkingTokens = chunk.usageMetadata?.thoughtsTokenCount ?? usage.thinkingTokens;
+        usage = {
+          inputTokens,
+          outputTokens,
+          thinkingTokens,
+          totalTokens:
+            chunk.usageMetadata?.totalTokenCount ?? inputTokens + outputTokens + thinkingTokens
+        };
+      }
+
+      yield { type: "usage" as const, usage };
+    } catch (error) {
+      if (error instanceof LlmProviderError) {
+        throw error;
+      }
+
+      const apiError = error as GeminiApiError;
+      if (apiError.name === "APIConnectionTimeoutError") {
+        throw new LlmProviderError("The LLM provider timed out", { cause: error });
+      }
+      if (apiError.status === 429) {
+        throw new LlmProviderError("Gemini rate limit exceeded. Try again later.", {
+          cause: error
+        });
+      }
+      if (apiError.status === 401 || apiError.status === 403) {
+        throw new LlmProviderError("Gemini authentication or permission failed", {
+          cause: error
+        });
+      }
+
+      throw new LlmProviderError("The LLM provider request failed", { cause: error });
+    }
+  }
 }

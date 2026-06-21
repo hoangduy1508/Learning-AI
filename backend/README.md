@@ -81,3 +81,13 @@ npm run learn:generation
 
 See [Generation Controls](docs/GENERATION_CONTROLS.md) for system instructions, temperature,
 output limits, and stop conditions.
+
+## Streaming chat
+
+`POST /api/chat/stream` returns `text/event-stream` events with the contract documented in
+[Streaming Chat](docs/STREAMING_CHAT.md).
+
+## Filesystem tools
+
+The backend can list, read, search, write, and delete files inside configured allowlisted roots.
+See [Filesystem Tools](docs/FILESYSTEM_TOOLS.md).

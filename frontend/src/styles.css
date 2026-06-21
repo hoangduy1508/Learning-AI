@@ -1,0 +1,292 @@
+:root {
+  color: #172033;
+  background: #eef2f7;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.panel {
+  width: min(1180px, 100%);
+  background: #ffffff;
+  border: 1px solid #d9e2ef;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 24px 60px rgba(25, 39, 66, 0.12);
+}
+
+.eyebrow {
+  color: #2563eb;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 8px 0 12px;
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.description,
+.muted {
+  color: #64748b;
+}
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 6px;
+  border-radius: 999px;
+  background: #eef2f7;
+  width: fit-content;
+}
+
+.chat-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+label {
+  font-weight: 700;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 14px 16px;
+  color: #172033;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 18px;
+  color: #ffffff;
+  background: #2563eb;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+button[type="button"] {
+  background: #dc2626;
+}
+
+button.tab {
+  background: transparent;
+  color: #475569;
+}
+
+button.tab.active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.secondary-button,
+button.secondary-button {
+  color: #172033;
+  background: #e2e8f0;
+}
+
+.compact {
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.answer-card {
+  margin-top: 24px;
+  border: 1px solid #d9e2ef;
+  border-radius: 18px;
+  background: #f8fafc;
+  padding: 18px;
+  min-height: 160px;
+}
+
+.answer-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #475569;
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+.answer {
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.error {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.warning {
+  color: #92400e;
+  font-weight: 700;
+}
+
+.success {
+  color: #15803d;
+  font-weight: 700;
+}
+
+.usage-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  border: 1px solid #d9e2ef;
+  border-radius: 16px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.metric span {
+  display: block;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.15rem;
+}
+
+.agent-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  margin-top: 8px;
+}
+
+.tool-call-list,
+.pending-panel {
+  margin-top: 18px;
+  border: 1px solid #d9e2ef;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.tool-call-list h2,
+.pending-panel h2 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.tool-call {
+  border: 1px solid #d9e2ef;
+  border-radius: 14px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.tool-call + .tool-call {
+  margin-top: 12px;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 12px 0 0;
+  border-radius: 12px;
+  padding: 12px;
+  color: #dbeafe;
+  background: #0f172a;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.pending-panel {
+  align-self: start;
+  position: sticky;
+  top: 20px;
+}
+
+.pending-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.pending-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.pending-card {
+  border: 1px solid #d9e2ef;
+  border-radius: 16px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.pending-card button {
+  margin-top: 12px;
+}
+
+.pending-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.pending-meta span {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 900px) {
+  .agent-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pending-panel {
+    position: static;
+  }
+}

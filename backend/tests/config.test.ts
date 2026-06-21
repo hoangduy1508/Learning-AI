@@ -27,4 +27,12 @@ describe("multi-provider configuration", () => {
     assert.throws(() => loadConfig({ LLM_PROVIDER: "gemini" }), /GEMINI_API_KEY/);
     assert.throws(() => loadConfig({ LLM_PROVIDER: "openai" }), /OPENAI_API_KEY/);
   });
+
+  it("parses filesystem agent auto-apply as an explicit boolean", () => {
+    assert.equal(loadConfig({ FILE_AGENT_AUTO_APPLY_WRITES: "true" }).FILE_AGENT_AUTO_APPLY_WRITES, true);
+    assert.equal(
+      loadConfig({ FILE_AGENT_AUTO_APPLY_WRITES: "false" }).FILE_AGENT_AUTO_APPLY_WRITES,
+      false
+    );
+  });
 });

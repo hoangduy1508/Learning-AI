@@ -21,4 +21,18 @@ export class FakeLlmProvider implements LlmProvider {
       }
     };
   }
+
+  async *stream(message: string, options?: { signal?: AbortSignal }) {
+    const result = await this.generate(message);
+    yield { type: "metadata" as const, provider: result.provider, model: result.model };
+
+    for (const part of result.text.split(/(\s+)/u).filter(Boolean)) {
+      if (options?.signal?.aborted) {
+        return;
+      }
+      yield { type: "delta" as const, text: part };
+    }
+
+    yield { type: "usage" as const, usage: result.usage };
+  }
 }

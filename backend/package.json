@@ -9,8 +9,9 @@
     "start": "node dist/server.js",
     "learn:tokens": "tsx src/scripts/token-lab.ts",
     "learn:generation": "tsx src/scripts/generation-lab.ts",
+    "reference:azure-foundry-agent": "tsx src/scripts/azure-foundry-file-agent-reference.ts",
     "typecheck": "tsc -p tsconfig.test.json",
-    "test": "node --import tsx --test tests/app.test.ts tests/config.test.ts"
+    "test": "node --import tsx --test tests/app.test.ts tests/config.test.ts tests/streaming.test.ts tests/filesystem.test.ts"
   },
   "engines": {
     "node": ">=20"
