@@ -4,8 +4,10 @@ import {
   approvePendingAction,
   chatWithFileAgent,
   listPendingActions,
+  listToolAudit,
   type AgentChatResponse,
-  type PendingAction
+  type PendingAction,
+  type ToolAuditEntry
 } from "./api/file-agent";
 import { streamChat } from "./api/chat-stream";
 import type { StreamEvent } from "./lib/stream-events";
@@ -39,10 +41,12 @@ export default function App() {
   const [agentResult, setAgentResult] = useState<AgentChatResponse | null>(null);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
+  const [toolAuditEntries, setToolAuditEntries] = useState<ToolAuditEntry[]>([]);
   const [approvalResult, setApprovalResult] = useState<unknown>(null);
 
   useEffect(() => {
     void refreshPendingActions();
+    void refreshToolAudit();
   }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -130,6 +134,7 @@ export default function App() {
       setAgentResult(response);
       setAgentStatus("done");
       await refreshPendingActions();
+      await refreshToolAudit();
     } catch (agentRequestError) {
       setAgentError(
         agentRequestError instanceof Error ? agentRequestError.message : "Unknown agent error"
@@ -146,6 +151,14 @@ export default function App() {
     }
   }
 
+  async function refreshToolAudit() {
+    try {
+      setToolAuditEntries(await listToolAudit());
+    } catch (auditError) {
+      setAgentError(auditError instanceof Error ? auditError.message : "Cannot load audit log");
+    }
+  }
+
   async function approveAction(actionId: string) {
     setAgentError(null);
     setApprovalResult(null);
@@ -154,6 +167,7 @@ export default function App() {
       const result = await approvePendingAction(actionId);
       setApprovalResult(result);
       await refreshPendingActions();
+      await refreshToolAudit();
     } catch (approvalError) {
       setAgentError(approvalError instanceof Error ? approvalError.message : "Approval failed");
     }
@@ -206,10 +220,12 @@ export default function App() {
             agentStatus={agentStatus}
             approvalResult={approvalResult}
             onApprove={approveAction}
+            onRefreshAudit={refreshToolAudit}
             onRefreshPending={refreshPendingActions}
             onSubmit={handleAgentSubmit}
             pendingActions={pendingActions}
             setAgentMessage={setAgentMessage}
+            toolAuditEntries={toolAuditEntries}
           />
         )}
       </section>
@@ -288,10 +304,12 @@ interface FileAgentViewProps {
   agentStatus: AgentStatus;
   approvalResult: unknown;
   onApprove(actionId: string): Promise<void>;
+  onRefreshAudit(): Promise<void>;
   onRefreshPending(): Promise<void>;
   onSubmit(event: FormEvent<HTMLFormElement>): void;
   pendingActions: PendingAction[];
   setAgentMessage(message: string): void;
+  toolAuditEntries: ToolAuditEntry[];
 }
 
 function FileAgentView(props: FileAgentViewProps) {
@@ -406,6 +424,27 @@ function FileAgentView(props: FileAgentViewProps) {
                   Approve
                 </button>
               </article>
+            ))}
+          </div>
+        )}
+
+        <div className="pending-header audit-header">
+          <h2>Tool audit</h2>
+          <button type="button" className="secondary-button compact" onClick={props.onRefreshAudit}>
+            Refresh
+          </button>
+        </div>
+        {props.toolAuditEntries.length === 0 ? (
+          <p className="muted">No audited tool calls yet.</p>
+        ) : (
+          <div className="pending-list">
+            {props.toolAuditEntries.slice(0, 8).map((entry) => (
+              <details key={entry.id} className="pending-card" open>
+                <summary>
+                  {entry.toolName} - {entry.status}
+                </summary>
+                <CodeBlock value={entry} />
+              </details>
             ))}
           </div>
         )}

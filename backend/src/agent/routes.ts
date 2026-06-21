@@ -27,6 +27,10 @@ export function registerAgentRoutes(app: FastifyInstance, config: AppConfig): vo
     actions: agent.listPendingActions()
   }));
 
+  app.get("/api/agent/audit", async () => ({
+    entries: agent.listAuditLog()
+  }));
+
   app.post("/api/agent/approve", async (request, reply) =>
     handleAgent(reply, async () => {
       const body = approveSchema.parse(request.body);

@@ -22,6 +22,22 @@ export interface PendingActionsResponse {
   actions: PendingAction[];
 }
 
+export interface ToolAuditEntry {
+  id: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  status: "pending" | "success" | "error";
+  autoApplied: boolean;
+  createdAt: string;
+  completedAt?: string;
+  result?: unknown;
+  error?: string;
+}
+
+export interface ToolAuditResponse {
+  entries: ToolAuditEntry[];
+}
+
 export interface ExecutedAction {
   toolName: "write_file" | "delete_file";
   args: Record<string, unknown>;
@@ -40,6 +56,11 @@ export async function chatWithFileAgent(message: string): Promise<AgentChatRespo
 export async function listPendingActions(): Promise<PendingAction[]> {
   const response = await requestJson<PendingActionsResponse>("/api/agent/pending");
   return response.actions;
+}
+
+export async function listToolAudit(): Promise<ToolAuditEntry[]> {
+  const response = await requestJson<ToolAuditResponse>("/api/agent/audit");
+  return response.entries;
 }
 
 export async function approvePendingAction(actionId: string): Promise<unknown> {

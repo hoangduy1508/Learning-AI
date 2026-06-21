@@ -4,7 +4,8 @@ import { afterEach, describe, it } from "node:test";
 import {
   approvePendingAction,
   chatWithFileAgent,
-  listPendingActions
+  listPendingActions,
+  listToolAudit
 } from "../src/api/file-agent";
 
 const originalFetch = globalThis.fetch;
@@ -71,6 +72,31 @@ describe("file agent api", () => {
     const result = await approvePendingAction("pending-1");
 
     assert.deepEqual(result, { ok: true });
+  });
+
+  it("loads tool audit entries", async () => {
+    globalThis.fetch = async (input) => {
+      assert.equal(input, "/api/agent/audit");
+      return Response.json({
+        entries: [
+          {
+            id: "audit-1",
+            toolName: "write_file",
+            args: { path: "notes/a.txt", content: "[redacted 5 bytes]" },
+            status: "success",
+            autoApplied: true,
+            createdAt: "2026-06-21T00:00:00.000Z",
+            completedAt: "2026-06-21T00:00:01.000Z"
+          }
+        ]
+      });
+    };
+
+    const entries = await listToolAudit();
+
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0]?.toolName, "write_file");
+    assert.equal(entries[0]?.status, "success");
   });
 
   it("throws backend detail messages", async () => {

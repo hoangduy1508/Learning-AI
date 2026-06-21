@@ -149,7 +149,7 @@ Kiến thức:
 - [ ] Phân biệt JSON mode và schema-constrained output
 - [ ] Phân biệt structured output và tool calling
 - [x] Hiểu tool choice, tool arguments và tool result
-- [~] Không tin tưởng dữ liệu do model tạo ra
+- [x] Không tin tưởng dữ liệu do model tạo ra
 
 Thực hành:
 
@@ -157,9 +157,9 @@ Thực hành:
 - [ ] Tạo tool thời tiết giả lập
 - [ ] Tạo tool đọc trạng thái đơn hàng
 - [ ] Tạo tool tạo support ticket
-- [ ] Validate authorization trước khi gọi tool
+- [x] Validate authorization trước khi gọi tool
 - [x] Yêu cầu confirmation trước write action
-- [ ] Test malformed arguments và unauthorized call
+- [x] Test malformed arguments và unauthorized call
 
 Definition of Done:
 
@@ -528,9 +528,9 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: Structured Output và Tool Calling
 - Current week: Tuần 3
-- Current task: Manual QA File Agent auto-apply với thư mục học tập an toàn, sau đó thêm audit log cho tool call
-- Blockers: In-app Browser không khởi động được trong sandbox hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete đã được bật theo yêu cầu người dùng nên chỉ dùng với thư mục được allowlist và dữ liệu học tập
-- Last updated: 2026-06-18
+- Current task: Học JSON Schema, phân biệt JSON mode/schema-constrained output/structured output/tool calling, sau đó parse structured output bằng Zod
+- Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
+- Last updated: 2026-06-21
 
 ## Progress Log
 
@@ -680,6 +680,21 @@ Observability / Evaluation / Cost Tracking
 - Thêm test config xác nhận `FILE_AGENT_AUTO_APPLY_WRITES=true/false` được parse đúng boolean, tránh lỗi chuỗi `"false"` bị hiểu nhầm thành truthy.
 - Kiểm chứng: backend `npm run typecheck`, `npm test` 16 tests pass, backend `npm run build`; frontend `npm run typecheck`, `npm test` 7 tests pass, frontend `npm run build`.
 - Task tiếp theo: manual QA agent auto-apply bằng prompt tạo/sửa/xóa file nhỏ trong thư mục allowlist, sau đó thêm audit log cho mọi tool call.
+
+### 2026-06-21 - File Agent audit log và QA auto-apply an toàn
+
+- Thêm audit log in-memory cho `FileAgentService`, ghi nhận `toolName`, args đã redact, trạng thái `pending/success/error`, thời điểm tạo/hoàn tất, `autoApplied`, kết quả tóm tắt hoặc lỗi.
+- Thêm endpoint `GET /api/agent/audit` để đọc audit log và nối frontend File Agent UI với panel `Tool audit`.
+- Redact `content` trong tool args và nội dung file trong result để audit log không lưu nguyên văn dữ liệu file nhạy cảm.
+- Refactor `FileAgentService` cho phép inject fake Gemini client trong test, nhờ đó kiểm chứng agent loop/tool calling mà không cần network hoặc API key thật.
+- Kiểm chứng auto-apply bằng thư mục tạm allowlist an toàn: fake model gọi `write_file`, backend tạo `notes/agent-qa.txt`, response có `executedActions`, audit có entry `success`.
+- Thêm test malformed arguments: thiếu `content` bị chặn với lỗi `Missing required argument: content` và audit ghi `error`.
+- Thêm test unauthorized call: path `..\outside.txt` bị chặn bởi allowlist guard và audit ghi `error`.
+- Cập nhật frontend API helper `listToolAudit()` và test tương ứng.
+- Kiểm chứng backend: `npm run typecheck`, `npm test` 19 tests pass, `npm run build`.
+- Kiểm chứng frontend: `npm run typecheck`, `npm test` 8 tests pass, `npm run build`.
+- Chưa chạy visual QA bằng in-app Browser vì phiên hiện tại không có Browser automation tool callable; production build đã xác nhận bundle hợp lệ.
+- Task tiếp theo: học JSON Schema, phân biệt JSON mode/schema-constrained output/structured output/tool calling, sau đó parse structured output bằng Zod.
 
 ## Session Notes Template
 

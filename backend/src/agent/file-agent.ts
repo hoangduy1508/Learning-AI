@@ -10,6 +10,12 @@ import {
 import type { AppConfig } from "../config.js";
 import { FileSystemToolService, FileToolError, parseAllowedRoots } from "../filesystem/service.js";
 
+interface ContentGenerator {
+  models: {
+    generateContent: GoogleGenAI["models"]["generateContent"];
+  };
+}
+
 interface PendingAction {
   id: string;
   toolName: "write_file" | "delete_file";
@@ -24,6 +30,18 @@ interface ExecutedAction {
   executedAt: string;
 }
 
+export interface ToolAuditEntry {
+  id: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  status: "pending" | "success" | "error";
+  autoApplied: boolean;
+  createdAt: string;
+  completedAt?: string;
+  result?: unknown;
+  error?: string;
+}
+
 export interface FileAgentResult {
   answer: string;
   toolCalls: Array<{ name: string; args: Record<string, unknown>; result: unknown }>;
@@ -32,18 +50,24 @@ export interface FileAgentResult {
 }
 
 export class FileAgentService {
-  private readonly client: GoogleGenAI;
+  private readonly client: ContentGenerator;
   private readonly files: FileSystemToolService;
   private readonly pendingActions = new Map<string, PendingAction>();
+  private readonly auditLog: ToolAuditEntry[] = [];
 
-  constructor(private readonly config: AppConfig) {
-    if (!config.GEMINI_API_KEY) {
+  constructor(
+    private readonly config: AppConfig,
+    client?: ContentGenerator
+  ) {
+    if (!client && !config.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY is required for file agent");
     }
-    this.client = new GoogleGenAI({
-      apiKey: config.GEMINI_API_KEY,
-      httpOptions: { timeout: config.LLM_TIMEOUT_SECONDS * 1_000 }
-    });
+    this.client =
+      client ??
+      new GoogleGenAI({
+        apiKey: config.GEMINI_API_KEY,
+        httpOptions: { timeout: config.LLM_TIMEOUT_SECONDS * 1_000 }
+      });
     this.files = new FileSystemToolService({
       allowedRoots: parseAllowedRoots(config.FILE_TOOL_ALLOWED_ROOTS),
       allowWrite: config.FILE_TOOL_ALLOW_WRITE,
@@ -98,10 +122,11 @@ export class FileAgentService {
       for (const call of functionCalls) {
         const name = call.name ?? "";
         const args = (call.args ?? {}) as Record<string, unknown>;
+        const auditEntry = this.createAuditEntry(name, args);
 
         if (name === "write_file" || name === "delete_file") {
           if (this.config.FILE_AGENT_AUTO_APPLY_WRITES) {
-            const result = await this.executeWriteTool(name, args);
+            const result = await this.executeWithAudit(auditEntry, () => this.executeWriteTool(name, args));
             const toolName = name;
             const executedAction: ExecutedAction = {
               toolName,
@@ -121,6 +146,7 @@ export class FileAgentService {
           }
 
           const pending = this.createPendingAction(name, args);
+          this.markAuditPending(auditEntry);
           return {
             answer: `Approval required before ${name}. Review pending action ${pending.id}.`,
             toolCalls,
@@ -129,7 +155,7 @@ export class FileAgentService {
           };
         }
 
-        const result = await this.executeReadOnlyTool(name, args);
+        const result = await this.executeWithAudit(auditEntry, () => this.executeReadOnlyTool(name, args));
         toolCalls.push({ name, args, result });
         functionResponses.push({
           functionResponse: {
@@ -156,6 +182,10 @@ export class FileAgentService {
     return [...this.pendingActions.values()];
   }
 
+  listAuditLog(): ToolAuditEntry[] {
+    return [...this.auditLog].reverse();
+  }
+
   async approve(actionId: string): Promise<unknown> {
     const action = this.pendingActions.get(actionId);
     if (!action) {
@@ -163,20 +193,25 @@ export class FileAgentService {
     }
 
     this.pendingActions.delete(actionId);
+    const auditEntry = this.createAuditEntry(action.toolName, action.args, false);
 
     if (action.toolName === "write_file") {
-      return await this.files.write(
-        asString(action.args.root),
-        requiredString(action.args.path, "path"),
-        requiredString(action.args.content, "content"),
-        { createDirs: Boolean(action.args.createDirs) }
+      return await this.executeWithAudit(auditEntry, () =>
+        this.files.write(
+          asString(action.args.root),
+          requiredString(action.args.path, "path"),
+          requiredString(action.args.content, "content"),
+          { createDirs: Boolean(action.args.createDirs) }
+        )
       );
     }
 
-    return await this.files.delete(asString(action.args.root), requiredString(action.args.path, "path"), {
-      recursive: Boolean(action.args.recursive),
-      confirmation: "DELETE"
-    });
+    return await this.executeWithAudit(auditEntry, () =>
+      this.files.delete(asString(action.args.root), requiredString(action.args.path, "path"), {
+        recursive: Boolean(action.args.recursive),
+        confirmation: "DELETE"
+      })
+    );
   }
 
   private createPendingAction(
@@ -191,6 +226,45 @@ export class FileAgentService {
     };
     this.pendingActions.set(action.id, action);
     return action;
+  }
+
+  private createAuditEntry(
+    toolName: string,
+    args: Record<string, unknown>,
+    autoApplied = this.config.FILE_AGENT_AUTO_APPLY_WRITES
+  ): ToolAuditEntry {
+    const entry: ToolAuditEntry = {
+      id: randomUUID(),
+      toolName,
+      args: redactToolArgs(args),
+      status: "pending",
+      autoApplied,
+      createdAt: new Date().toISOString()
+    };
+    this.auditLog.push(entry);
+    if (this.auditLog.length > 200) {
+      this.auditLog.shift();
+    }
+    return entry;
+  }
+
+  private markAuditPending(entry: ToolAuditEntry): void {
+    entry.status = "pending";
+  }
+
+  private async executeWithAudit<T>(entry: ToolAuditEntry, action: () => Promise<T>): Promise<T> {
+    try {
+      const result = await action();
+      entry.status = "success";
+      entry.completedAt = new Date().toISOString();
+      entry.result = summarizeToolResult(result);
+      return result;
+    } catch (error) {
+      entry.status = "error";
+      entry.completedAt = new Date().toISOString();
+      entry.error = error instanceof Error ? error.message : "Unknown tool error";
+      throw error;
+    }
   }
 
   private async executeReadOnlyTool(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -239,6 +313,29 @@ function requiredString(value: unknown, name: string): string {
   if (!result) {
     throw new FileToolError(`Missing required argument: ${name}`, 400);
   }
+  return result;
+}
+
+function redactToolArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const redacted = { ...args };
+  if (typeof redacted.content === "string") {
+    redacted.content = `[redacted ${Buffer.byteLength(redacted.content, "utf8")} bytes]`;
+  }
+  return redacted;
+}
+
+function summarizeToolResult(result: unknown): unknown {
+  if (!result || typeof result !== "object") {
+    return result;
+  }
+
+  if ("content" in result && typeof result.content === "string") {
+    return {
+      ...result,
+      content: `[redacted ${Buffer.byteLength(result.content, "utf8")} bytes]`
+    };
+  }
+
   return result;
 }
 
