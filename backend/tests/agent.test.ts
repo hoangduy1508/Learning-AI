@@ -84,6 +84,42 @@ function createAgentWithToolCall(args: Record<string, unknown>): FileAgentServic
   );
 }
 
+function createWeatherAgent(args: Record<string, unknown>): FileAgentService {
+  let callCount = 0;
+  const fakeClient = {
+    models: {
+      async generateContent() {
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            functionCalls: [
+              {
+                name: "get_weather",
+                args
+              }
+            ]
+          };
+        }
+
+        return {
+          text: "The fake weather result is ready.",
+          functionCalls: []
+        };
+      }
+    }
+  };
+
+  return new FileAgentService(
+    loadConfig({
+      FILE_TOOL_ALLOWED_ROOTS: root,
+      FILE_TOOL_ALLOW_WRITE: "true",
+      FILE_TOOL_ALLOW_DELETE: "true",
+      FILE_AGENT_AUTO_APPLY_WRITES: "true"
+    }),
+    fakeClient
+  );
+}
+
 describe("FileAgentService", () => {
   it("auto-applies write tools and records a redacted audit entry", async () => {
     const agent = createAutoApplyAgent();
@@ -135,5 +171,41 @@ describe("FileAgentService", () => {
     assert.equal(audit[0]?.status, "error");
     assert.equal(audit[0]?.args.content, "[redacted 21 bytes]");
     assert.equal(audit[0]?.error, "Path is outside configured allowed roots");
+  });
+
+  it("executes the fake weather tool with validated arguments", async () => {
+    const agent = createWeatherAgent({ location: "Ho Chi Minh City", unit: "celsius" });
+
+    const response = await agent.chat("What is the weather in Ho Chi Minh City?");
+
+    assert.equal(response.answer, "The fake weather result is ready.");
+    assert.equal(response.toolCalls.length, 1);
+    assert.equal(response.toolCalls[0]?.name, "get_weather");
+    assert.deepEqual(response.toolCalls[0]?.result, {
+      location: "Ho Chi Minh City",
+      unit: "celsius",
+      temperature: 27,
+      condition: "sunny",
+      humidityPercent: 65,
+      source: "fake-weather-tool"
+    });
+
+    const audit = agent.listAuditLog();
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]?.toolName, "get_weather");
+    assert.equal(audit[0]?.status, "success");
+    assert.equal(audit[0]?.autoApplied, true);
+  });
+
+  it("rejects malformed weather arguments and records an audit error", async () => {
+    const agent = createWeatherAgent({ location: "", unit: "kelvin" });
+
+    await assert.rejects(agent.chat("Weather please."), /String must contain at least 2 character/);
+
+    const audit = agent.listAuditLog();
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]?.toolName, "get_weather");
+    assert.equal(audit[0]?.status, "error");
+    assert.match(audit[0]?.error ?? "", /String must contain at least 2 character/);
   });
 });

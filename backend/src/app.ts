@@ -6,6 +6,11 @@ import type { AppConfig } from "./config.js";
 import { registerFileRoutes } from "./filesystem/routes.js";
 import type { LlmProvider } from "./providers/types.js";
 import { LlmProviderError } from "./providers/types.js";
+import {
+  extractSupportTicket,
+  StructuredOutputError,
+  validateSupportTicketRequest
+} from "./structured/support-ticket.js";
 import { encodeStreamEvent } from "./streaming/events.js";
 
 const chatRequestSchema = z.object({
@@ -135,6 +140,36 @@ export function buildApp(provider: LlmProvider, config?: AppConfig): FastifyInst
       reply.raw.write(encodeStreamEvent({ type: "error", message }));
     } finally {
       reply.raw.end();
+    }
+  });
+
+  app.post("/api/structured/support-ticket", async (request, reply) => {
+    const parsedRequest = chatRequestSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.status(422).send({
+        detail: "Invalid request",
+        errors: parsedRequest.error.flatten().fieldErrors
+      });
+    }
+
+    try {
+      const requestBody = validateSupportTicketRequest(request.body);
+      return await extractSupportTicket(provider, requestBody.message);
+    } catch (error) {
+      if (error instanceof StructuredOutputError) {
+        request.log.warn({ error }, "Structured output validation failed");
+        return reply.status(422).send({
+          detail: error.message,
+          errors: error.details
+        });
+      }
+
+      if (error instanceof LlmProviderError) {
+        request.log.warn({ error }, "LLM request failed");
+        return reply.status(502).send({ detail: error.message });
+      }
+
+      throw error;
     }
   });
 

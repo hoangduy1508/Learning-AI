@@ -9,6 +9,7 @@ import {
 
 import type { AppConfig } from "../config.js";
 import { FileSystemToolService, FileToolError, parseAllowedRoots } from "../filesystem/service.js";
+import { getFakeWeather } from "./weather-tool.js";
 
 interface ContentGenerator {
   models: {
@@ -268,6 +269,9 @@ export class FileAgentService {
   }
 
   private async executeReadOnlyTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+    if (name === "get_weather") {
+      return getFakeWeather(args);
+    }
     if (name === "list_files") {
       return await this.files.list(asString(args.root), asString(args.path) ?? ".");
     }
@@ -340,6 +344,19 @@ function summarizeToolResult(result: unknown): unknown {
 }
 
 const fileToolDeclarations: FunctionDeclaration[] = [
+  {
+    name: "get_weather",
+    description:
+      "Get fake deterministic weather for a location. Use this for weather questions in the learning app; it does not call a real external weather API.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        location: { type: Type.STRING },
+        unit: { type: Type.STRING, enum: ["celsius", "fahrenheit"] }
+      },
+      required: ["location"]
+    }
+  },
   {
     name: "list_files",
     description: "List files and directories inside an allowed root.",

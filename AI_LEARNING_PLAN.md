@@ -145,16 +145,16 @@ Definition of Done:
 
 Kiến thức:
 
-- [ ] Hiểu JSON Schema
-- [ ] Phân biệt JSON mode và schema-constrained output
-- [ ] Phân biệt structured output và tool calling
+- [x] Hiểu JSON Schema
+- [x] Phân biệt JSON mode và schema-constrained output
+- [x] Phân biệt structured output và tool calling
 - [x] Hiểu tool choice, tool arguments và tool result
 - [x] Không tin tưởng dữ liệu do model tạo ra
 
 Thực hành:
 
-- [ ] Parse structured output bằng Zod
-- [ ] Tạo tool thời tiết giả lập
+- [x] Parse structured output bằng Zod
+- [x] Tạo tool thời tiết giả lập
 - [ ] Tạo tool đọc trạng thái đơn hàng
 - [ ] Tạo tool tạo support ticket
 - [x] Validate authorization trước khi gọi tool
@@ -528,9 +528,9 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: Structured Output và Tool Calling
 - Current week: Tuần 3
-- Current task: Học JSON Schema, phân biệt JSON mode/schema-constrained output/structured output/tool calling, sau đó parse structured output bằng Zod
+- Current task: Tạo tool đọc trạng thái đơn hàng bằng Zod schema và test authorization/validation trước khi gọi tool
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
-- Last updated: 2026-06-21
+- Last updated: 2026-06-27
 
 ## Progress Log
 
@@ -695,6 +695,27 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng frontend: `npm run typecheck`, `npm test` 8 tests pass, `npm run build`.
 - Chưa chạy visual QA bằng in-app Browser vì phiên hiện tại không có Browser automation tool callable; production build đã xác nhận bundle hợp lệ.
 - Task tiếp theo: học JSON Schema, phân biệt JSON mode/schema-constrained output/structured output/tool calling, sau đó parse structured output bằng Zod.
+
+### 2026-06-27 - Structured output và Zod parsing
+
+- Học và ghi chú sự khác nhau giữa JSON Schema, JSON mode, schema-constrained output, structured output và tool calling trong `backend/docs/STRUCTURED_OUTPUT.md`.
+- Thêm module `backend/src/structured/support-ticket.ts` để build prompt support ticket, parse JSON object từ model text và validate runtime bằng Zod.
+- Thêm endpoint `POST /api/structured/support-ticket` trả typed support ticket khi output hợp lệ và trả `422` khi model trả malformed JSON hoặc JSON sai domain schema.
+- Parser chấp nhận JSON thuần hoặc JSON bị bọc trong markdown fence, nhưng vẫn coi toàn bộ model output là untrusted input.
+- Thêm tests cho fenced JSON parsing, extraction endpoint thành công, malformed JSON và schema mismatch.
+- Kiểm chứng backend: `npm run typecheck`, `npm test` 23 tests pass, `npm run build`.
+- Task tiếp theo: tạo tool thời tiết giả lập bằng Zod schema, sau đó nối vào tool-calling flow có validation và test.
+
+### 2026-06-27 - Fake weather tool calling
+
+- Thêm read-only tool `get_weather` vào Gemini function declarations của `FileAgentService`.
+- Tạo module `backend/src/agent/weather-tool.ts` với Zod schema cho arguments: `location` bắt buộc và `unit` chỉ được là `celsius` hoặc `fahrenheit`.
+- Tool thời tiết là fake/deterministic, không gọi API bên ngoài, phù hợp cho bài học tool calling và automated tests không cần network.
+- Backend validate arguments trước khi execute; malformed arguments từ model bị reject và audit log ghi trạng thái `error`.
+- Thêm tài liệu song ngữ `backend/docs/TOOL_CALLING.md` giải thích tool calling, fake weather tool, validation boundary và khác biệt read-only/write tool.
+- Thêm tests cho tool call thành công, malformed weather arguments và audit log.
+- Kiểm chứng backend: `npm run typecheck`, `npm test` 25 tests pass, `npm run build`.
+- Task tiếp theo: tạo tool đọc trạng thái đơn hàng bằng Zod schema và test authorization/validation trước khi gọi tool.
 
 ## Session Notes Template
 
