@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { FileAgentService } from "../src/agent/file-agent.js";
+import { FakeSupportTicketStore } from "../src/agent/support-ticket-tool.js";
 import { loadConfig } from "../src/config.js";
 
 let root: string;
@@ -120,6 +121,70 @@ function createWeatherAgent(args: Record<string, unknown>): FileAgentService {
   );
 }
 
+function createOrderAgent(args: Record<string, unknown>, currentUserId = "user_demo"): FileAgentService {
+  let callCount = 0;
+  const fakeClient = {
+    models: {
+      async generateContent() {
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            functionCalls: [
+              {
+                name: "get_order_status",
+                args
+              }
+            ]
+          };
+        }
+
+        return {
+          text: "The order status result is ready.",
+          functionCalls: []
+        };
+      }
+    }
+  };
+
+  return new FileAgentService(
+    loadConfig({
+      FILE_TOOL_ALLOWED_ROOTS: root,
+      FILE_TOOL_ALLOW_WRITE: "true",
+      FILE_TOOL_ALLOW_DELETE: "true",
+      FILE_AGENT_AUTO_APPLY_WRITES: "true"
+    }),
+    fakeClient,
+    currentUserId
+  );
+}
+
+function createSupportTicketAgent(args: Record<string, unknown>): FileAgentService {
+  const fakeClient = {
+    models: {
+      async generateContent() {
+        return {
+          functionCalls: [
+            {
+              name: "create_support_ticket",
+              args
+            }
+          ]
+        };
+      }
+    }
+  };
+
+  return new FileAgentService(
+    loadConfig({
+      FILE_TOOL_ALLOWED_ROOTS: root,
+      FILE_TOOL_ALLOW_WRITE: "true",
+      FILE_TOOL_ALLOW_DELETE: "true",
+      FILE_AGENT_AUTO_APPLY_WRITES: "true"
+    }),
+    fakeClient
+  );
+}
+
 describe("FileAgentService", () => {
   it("auto-applies write tools and records a redacted audit entry", async () => {
     const agent = createAutoApplyAgent();
@@ -207,5 +272,156 @@ describe("FileAgentService", () => {
     assert.equal(audit[0]?.toolName, "get_weather");
     assert.equal(audit[0]?.status, "error");
     assert.match(audit[0]?.error ?? "", /String must contain at least 2 character/);
+  });
+
+  it("executes the order status tool for an order owned by the current user", async () => {
+    const agent = createOrderAgent({ orderId: "ord_1001" });
+
+    const response = await agent.chat("Where is my order ord_1001?");
+
+    assert.equal(response.answer, "The order status result is ready.");
+    assert.equal(response.toolCalls.length, 1);
+    assert.equal(response.toolCalls[0]?.name, "get_order_status");
+    assert.deepEqual(response.toolCalls[0]?.result, {
+      orderId: "ord_1001",
+      status: "shipped",
+      ownerUserId: "user_demo",
+      updatedAt: "2026-06-26T10:30:00.000Z",
+      items: [{ sku: "sku_keyboard", name: "Mechanical Keyboard", quantity: 1 }],
+      source: "fake-order-store"
+    });
+
+    const audit = agent.listAuditLog();
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]?.toolName, "get_order_status");
+    assert.equal(audit[0]?.status, "success");
+  });
+
+  it("rejects order status access for an order owned by another user", async () => {
+    const agent = createOrderAgent({ orderId: "ord_9009" }, "user_demo");
+
+    await assert.rejects(
+      agent.chat("Where is order ord_9009?"),
+      /Order does not belong to the current user/
+    );
+
+    const audit = agent.listAuditLog();
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]?.toolName, "get_order_status");
+    assert.equal(audit[0]?.status, "error");
+    assert.equal(audit[0]?.error, "Order does not belong to the current user");
+  });
+
+  it("rejects malformed order status arguments and records an audit error", async () => {
+    const agent = createOrderAgent({ orderId: "1001" });
+
+    await assert.rejects(agent.chat("Where is order 1001?"), /orderId must look like ord_123/);
+
+    const audit = agent.listAuditLog();
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]?.toolName, "get_order_status");
+    assert.equal(audit[0]?.status, "error");
+    assert.match(audit[0]?.error ?? "", /orderId must look like ord_123/);
+  });
+
+  it("requires approval before creating a support ticket", async () => {
+    const agent = createSupportTicketAgent({
+      title: "Invoice download fails",
+      category: "billing",
+      priority: "high",
+      customerEmail: "linh@example.com",
+      summary: "The customer cannot download the latest invoice from the billing page.",
+      idempotencyKey: "ticket_invoice_download_fails"
+    });
+
+    const response = await agent.chat("Create a support ticket for my invoice issue.");
+
+    assert.match(response.answer, /Approval required before create_support_ticket/);
+    assert.equal(response.approvalRequired?.toolName, "create_support_ticket");
+    assert.equal(response.executedActions?.length, 0);
+
+    const pending = agent.listPendingActions();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0]?.toolName, "create_support_ticket");
+
+    const audit = agent.listAuditLog();
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]?.toolName, "create_support_ticket");
+    assert.equal(audit[0]?.status, "pending");
+    assert.equal(audit[0]?.args.customerEmail, "[redacted email]");
+    assert.equal(audit[0]?.args.summary, "[redacted 70 bytes]");
+  });
+
+  it("creates a support ticket after approval", async () => {
+    const agent = createSupportTicketAgent({
+      title: "Password reset link expired",
+      category: "account",
+      priority: "medium",
+      customerEmail: null,
+      summary: "The password reset link expired before the customer could use it.",
+      idempotencyKey: "ticket_password_reset_expired"
+    });
+
+    const response = await agent.chat("Create a ticket for password reset.");
+    const result = await agent.approve(response.approvalRequired?.id ?? "");
+
+    assert.deepEqual(result, {
+      ticketId: "tkt_160a05d1e1",
+      title: "Password reset link expired",
+      category: "account",
+      priority: "medium",
+      customerEmail: null,
+      summary: "The password reset link expired before the customer could use it.",
+      createdByUserId: "user_demo",
+      status: "open",
+      idempotencyKey: "ticket_password_reset_expired",
+      deduplicated: false,
+      source: "fake-support-ticket-store"
+    });
+    assert.equal(agent.listPendingActions().length, 0);
+
+    const audit = agent.listAuditLog();
+    assert.equal(audit.length, 2);
+    assert.equal(audit[0]?.toolName, "create_support_ticket");
+    assert.equal(audit[0]?.status, "success");
+    assert.equal(audit[1]?.status, "pending");
+  });
+
+  it("deduplicates support ticket creation with the same idempotency key", () => {
+    const store = new FakeSupportTicketStore();
+    const args = {
+      title: "App crashes on login",
+      category: "technical",
+      priority: "high",
+      customerEmail: "minh@example.com",
+      summary: "The app crashes immediately after the customer submits the login form.",
+      idempotencyKey: "ticket_login_crash",
+      confirmation: "CREATE_TICKET"
+    };
+
+    const first = store.create(args, "user_demo");
+    const second = store.create(args, "user_demo");
+
+    assert.equal(first.ticketId, second.ticketId);
+    assert.equal(first.deduplicated, false);
+    assert.equal(second.deduplicated, true);
+  });
+
+  it("rejects malformed support ticket proposals before approval", async () => {
+    const agent = createSupportTicketAgent({
+      title: "No",
+      category: "refund",
+      priority: "urgent",
+      summary: "short",
+      idempotencyKey: "ticket_bad"
+    });
+
+    await assert.rejects(agent.chat("Create a bad support ticket."), /String must contain/);
+
+    assert.equal(agent.listPendingActions().length, 0);
+    const audit = agent.listAuditLog();
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]?.toolName, "create_support_ticket");
+    assert.equal(audit[0]?.status, "error");
   });
 });

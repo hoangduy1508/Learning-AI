@@ -9,6 +9,8 @@ import {
 
 import type { AppConfig } from "../config.js";
 import { FileSystemToolService, FileToolError, parseAllowedRoots } from "../filesystem/service.js";
+import { getFakeOrderStatus } from "./order-tool.js";
+import { FakeSupportTicketStore, supportTicketToolProposalSchema } from "./support-ticket-tool.js";
 import { getFakeWeather } from "./weather-tool.js";
 
 interface ContentGenerator {
@@ -19,13 +21,13 @@ interface ContentGenerator {
 
 interface PendingAction {
   id: string;
-  toolName: "write_file" | "delete_file";
+  toolName: "write_file" | "delete_file" | "create_support_ticket";
   args: Record<string, unknown>;
   createdAt: string;
 }
 
 interface ExecutedAction {
-  toolName: "write_file" | "delete_file";
+  toolName: "write_file" | "delete_file" | "create_support_ticket";
   args: Record<string, unknown>;
   result: unknown;
   executedAt: string;
@@ -53,12 +55,14 @@ export interface FileAgentResult {
 export class FileAgentService {
   private readonly client: ContentGenerator;
   private readonly files: FileSystemToolService;
+  private readonly supportTickets = new FakeSupportTicketStore();
   private readonly pendingActions = new Map<string, PendingAction>();
   private readonly auditLog: ToolAuditEntry[] = [];
 
   constructor(
     private readonly config: AppConfig,
-    client?: ContentGenerator
+    client?: ContentGenerator,
+    private readonly currentUserId = "user_demo"
   ) {
     if (!client && !config.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY is required for file agent");
@@ -125,9 +129,31 @@ export class FileAgentService {
         const args = (call.args ?? {}) as Record<string, unknown>;
         const auditEntry = this.createAuditEntry(name, args);
 
-        if (name === "write_file" || name === "delete_file") {
+        if (name === "write_file" || name === "delete_file" || name === "create_support_ticket") {
+          if (name === "create_support_ticket") {
+            try {
+              supportTicketToolProposalSchema.parse(args);
+            } catch (error) {
+              auditEntry.status = "error";
+              auditEntry.completedAt = new Date().toISOString();
+              auditEntry.error = error instanceof Error ? error.message : "Invalid support ticket";
+              throw error;
+            }
+
+            const pending = this.createPendingAction(name, args);
+            this.markAuditPending(auditEntry);
+            return {
+              answer: `Approval required before ${name}. Review pending action ${pending.id}.`,
+              toolCalls,
+              executedActions,
+              approvalRequired: pending
+            };
+          }
+
           if (this.config.FILE_AGENT_AUTO_APPLY_WRITES) {
-            const result = await this.executeWithAudit(auditEntry, () => this.executeWriteTool(name, args));
+            const result = await this.executeWithAudit(auditEntry, () =>
+              this.executeWriteTool(name, args)
+            );
             const toolName = name;
             const executedAction: ExecutedAction = {
               toolName,
@@ -196,6 +222,18 @@ export class FileAgentService {
     this.pendingActions.delete(actionId);
     const auditEntry = this.createAuditEntry(action.toolName, action.args, false);
 
+    if (action.toolName === "create_support_ticket") {
+      return await this.executeWithAudit(auditEntry, () =>
+        this.supportTickets.create(
+          {
+            ...action.args,
+            confirmation: "CREATE_TICKET"
+          },
+          this.currentUserId
+        )
+      );
+    }
+
     if (action.toolName === "write_file") {
       return await this.executeWithAudit(auditEntry, () =>
         this.files.write(
@@ -253,7 +291,7 @@ export class FileAgentService {
     entry.status = "pending";
   }
 
-  private async executeWithAudit<T>(entry: ToolAuditEntry, action: () => Promise<T>): Promise<T> {
+  private async executeWithAudit<T>(entry: ToolAuditEntry, action: () => T | Promise<T>): Promise<T> {
     try {
       const result = await action();
       entry.status = "success";
@@ -271,6 +309,9 @@ export class FileAgentService {
   private async executeReadOnlyTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     if (name === "get_weather") {
       return getFakeWeather(args);
+    }
+    if (name === "get_order_status") {
+      return getFakeOrderStatus(args, this.currentUserId);
     }
     if (name === "list_files") {
       return await this.files.list(asString(args.root), asString(args.path) ?? ".");
@@ -325,6 +366,12 @@ function redactToolArgs(args: Record<string, unknown>): Record<string, unknown> 
   if (typeof redacted.content === "string") {
     redacted.content = `[redacted ${Buffer.byteLength(redacted.content, "utf8")} bytes]`;
   }
+  if (typeof redacted.customerEmail === "string") {
+    redacted.customerEmail = "[redacted email]";
+  }
+  if (typeof redacted.summary === "string") {
+    redacted.summary = `[redacted ${Buffer.byteLength(redacted.summary, "utf8")} bytes]`;
+  }
   return redacted;
 }
 
@@ -355,6 +402,35 @@ const fileToolDeclarations: FunctionDeclaration[] = [
         unit: { type: Type.STRING, enum: ["celsius", "fahrenheit"] }
       },
       required: ["location"]
+    }
+  },
+  {
+    name: "get_order_status",
+    description:
+      "Read the status of a fake order owned by the current authenticated user. The backend, not the model, enforces order ownership.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        orderId: { type: Type.STRING }
+      },
+      required: ["orderId"]
+    }
+  },
+  {
+    name: "create_support_ticket",
+    description:
+      "Propose a support ticket to create for the current user. This write action requires human approval; include a stable idempotencyKey so retries do not create duplicate tickets.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        category: { type: Type.STRING, enum: ["billing", "technical", "account", "general"] },
+        priority: { type: Type.STRING, enum: ["low", "medium", "high"] },
+        customerEmail: { type: Type.STRING },
+        summary: { type: Type.STRING },
+        idempotencyKey: { type: Type.STRING }
+      },
+      required: ["title", "category", "priority", "summary", "idempotencyKey"]
     }
   },
   {

@@ -155,8 +155,8 @@ Thực hành:
 
 - [x] Parse structured output bằng Zod
 - [x] Tạo tool thời tiết giả lập
-- [ ] Tạo tool đọc trạng thái đơn hàng
-- [ ] Tạo tool tạo support ticket
+- [x] Tạo tool đọc trạng thái đơn hàng
+- [x] Tạo tool tạo support ticket
 - [x] Validate authorization trước khi gọi tool
 - [x] Yêu cầu confirmation trước write action
 - [x] Test malformed arguments và unauthorized call
@@ -171,7 +171,7 @@ Definition of Done:
 
 Kiến thức:
 
-- [ ] Thiết kế bảng conversation và message
+- [x] Thiết kế bảng conversation và message
 - [ ] Hiểu sliding window, truncation, summarization và compaction
 - [ ] Hiểu retry với exponential backoff và jitter
 - [ ] Hiểu rate limiting
@@ -179,7 +179,7 @@ Kiến thức:
 
 Thực hành:
 
-- [ ] Lưu conversation trong PostgreSQL
+- [~] Lưu conversation trong PostgreSQL
 - [ ] Chỉ gửi history cần thiết cho model
 - [ ] Thêm giới hạn message/context
 - [ ] Thêm rate limit theo user
@@ -526,11 +526,11 @@ Observability / Evaluation / Cost Tracking
 
 ## Current Progress
 
-- Current phase: Structured Output và Tool Calling
-- Current week: Tuần 3
-- Current task: Tạo tool đọc trạng thái đơn hàng bằng Zod schema và test authorization/validation trước khi gọi tool
+- Current phase: Conversation và Production Basics
+- Current week: Tuần 4
+- Current task: Thêm PostgreSQL repository/driver thật cho conversation persistence, sau đó học sliding window/truncation/summarization/compaction
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
-- Last updated: 2026-06-27
+- Last updated: 2026-06-28
 
 ## Progress Log
 
@@ -716,6 +716,45 @@ Observability / Evaluation / Cost Tracking
 - Thêm tests cho tool call thành công, malformed weather arguments và audit log.
 - Kiểm chứng backend: `npm run typecheck`, `npm test` 25 tests pass, `npm run build`.
 - Task tiếp theo: tạo tool đọc trạng thái đơn hàng bằng Zod schema và test authorization/validation trước khi gọi tool.
+
+### 2026-06-27 - Order status tool calling
+
+- Thêm read-only tool `get_order_status` vào Gemini function declarations của `FileAgentService`.
+- Tạo module `backend/src/agent/order-tool.ts` với Zod schema cho `orderId` dạng `ord_...` và fake order store deterministic.
+- Backend kiểm tra ownership bằng `currentUserId` của service, không tin `userId` do model có thể gửi trong tool arguments.
+- Tool trả trạng thái đơn hàng chỉ khi order thuộc user hiện tại; order của user khác bị chặn với authorization error.
+- Cập nhật tài liệu song ngữ `backend/docs/TOOL_CALLING.md` với phần Order Status Tool và validation/authorization boundary.
+- Thêm tests cho order thuộc user hiện tại, order thuộc user khác, malformed `orderId` và audit log.
+- Kiểm chứng backend: `npm run typecheck`, `npm test` 28 tests pass, `npm run build`.
+- Task tiếp theo: tạo tool tạo support ticket với confirmation/idempotency cho write action và test validation.
+
+### 2026-06-27 - Support ticket write tool
+
+- Thêm write tool `create_support_ticket` vào Gemini function declarations của `FileAgentService`.
+- Tạo module `backend/src/agent/support-ticket-tool.ts` với Zod schema cho ticket proposal, confirmation literal `CREATE_TICKET` và fake in-memory support ticket store.
+- Backend validate proposal trước khi tạo pending action; malformed proposal bị reject và audit log ghi `error`.
+- Tool tạo support ticket luôn yêu cầu approval, không auto-apply theo cấu hình file tool; backend chỉ thêm `confirmation: "CREATE_TICKET"` sau khi approve.
+- Thêm `idempotencyKey` để retry cùng một ticket không tạo bản ghi trùng; store trả lại cùng `ticketId` với `deduplicated: true`.
+- Audit log redact `customerEmail` và `summary` để tránh lưu PII/nội dung ticket nhạy cảm.
+- Cập nhật tài liệu song ngữ `backend/docs/TOOL_CALLING.md` với phần Support Ticket Tool, confirmation và idempotency.
+- Thêm tests cho pending approval, approve tạo ticket, idempotency dedupe, malformed proposal và audit log.
+- Kiểm chứng backend: `npm run typecheck`, `npm test` 32 tests pass, `npm run build`.
+- Hoàn thành toàn bộ thực hành Tuần 3 về structured output và tool calling.
+- Task tiếp theo: bắt đầu Tuần 4, thiết kế bảng conversation/message và lưu conversation trong PostgreSQL.
+
+### 2026-06-28 - Conversation/message schema và persistence contract
+
+- Thiết kế schema PostgreSQL cho `conversations` và `conversation_messages` tại `backend/src/conversations/schema.sql`.
+- Tách `conversations` làm thread metadata/owner và `conversation_messages` làm từng message theo thứ tự thời gian.
+- Thêm index `(user_id, updated_at DESC)` để list conversation theo user và `(conversation_id, created_at ASC)` để lấy history đúng thứ tự.
+- Lưu provider, model và token usage trên assistant message để chuẩn bị tính cost theo request/user.
+- Thêm `ConversationRepository` contract và `InMemoryConversationRepository` để test persistence flow không cần PostgreSQL runtime.
+- Nối optional `conversationRepository` vào `POST /api/chat`: request mới tạo conversation, request có `conversationId` append vào conversation nếu đúng owner.
+- Backend không tin `conversationId` trần từ client; kiểm tra `userId` ownership trước khi append message và trả `404` nếu conversation không thuộc user hiện tại.
+- Thêm tài liệu `backend/docs/CONVERSATION_PERSISTENCE.md` mô tả schema, trust boundary và bước tiếp theo.
+- Kiểm chứng backend: `npm run typecheck`, `npm test` 35 tests pass, `npm run build`.
+- Chưa hoàn tất PostgreSQL runtime thật vì project chưa có driver/Drizzle/Docker Compose cho database; checklist phần lưu PostgreSQL để `[~]`.
+- Task tiếp theo: thêm PostgreSQL repository implementation bằng `pg` hoặc Drizzle, cấu hình connection env, chạy migration và test conversation persistence với database thật.
 
 ## Session Notes Template
 

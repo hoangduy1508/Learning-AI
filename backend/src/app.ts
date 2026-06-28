@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { registerAgentRoutes } from "./agent/routes.js";
 import type { AppConfig } from "./config.js";
+import type { ConversationRepository } from "./conversations/repository.js";
 import { registerFileRoutes } from "./filesystem/routes.js";
 import type { LlmProvider } from "./providers/types.js";
 import { LlmProviderError } from "./providers/types.js";
@@ -14,11 +15,22 @@ import {
 import { encodeStreamEvent } from "./streaming/events.js";
 
 const chatRequestSchema = z.object({
-  message: z.string().min(1).max(10_000)
+  message: z.string().min(1).max(10_000),
+  conversationId: z.string().uuid().optional(),
+  userId: z.string().min(1).max(128).default("demo-user")
 });
 
-export function buildApp(provider: LlmProvider, config?: AppConfig): FastifyInstance {
+interface BuildAppOptions {
+  conversationRepository?: ConversationRepository;
+}
+
+export function buildApp(
+  provider: LlmProvider,
+  config?: AppConfig,
+  options: BuildAppOptions = {}
+): FastifyInstance {
   const app = Fastify({ logger: true });
+  const conversationRepository = options.conversationRepository;
 
   app.get("/health", async () => ({ status: "ok" }));
   if (config) {
@@ -39,8 +51,42 @@ export function buildApp(provider: LlmProvider, config?: AppConfig): FastifyInst
 
     const startedAt = performance.now();
     try {
+      const conversation = conversationRepository
+        ? parsedRequest.data.conversationId
+          ? await conversationRepository.findConversationForUser(
+              parsedRequest.data.conversationId,
+              parsedRequest.data.userId
+            )
+          : await conversationRepository.createConversation(parsedRequest.data.userId)
+        : null;
+
+      if (conversationRepository && !conversation) {
+        return reply.status(404).send({ detail: "Conversation not found" });
+      }
+
+      if (conversationRepository && conversation) {
+        await conversationRepository.addMessage({
+          conversationId: conversation.id,
+          role: "user",
+          content: parsedRequest.data.message
+        });
+      }
+
       const result = await provider.generate(parsedRequest.data.message);
       const latencyMs = Math.round(performance.now() - startedAt);
+
+      let assistantMessageId: string | undefined;
+      if (conversationRepository && conversation) {
+        const assistantMessage = await conversationRepository.addMessage({
+          conversationId: conversation.id,
+          role: "assistant",
+          content: result.text,
+          model: result.model,
+          provider: result.provider,
+          usage: result.usage
+        });
+        assistantMessageId = assistantMessage.id;
+      }
 
       request.log.info(
         {
@@ -65,7 +111,9 @@ export function buildApp(provider: LlmProvider, config?: AppConfig): FastifyInst
           thinking_tokens: result.usage.thinkingTokens ?? 0,
           total_tokens: result.usage.totalTokens
         },
-        latency_ms: latencyMs
+        latency_ms: latencyMs,
+        conversation_id: conversation?.id,
+        assistant_message_id: assistantMessageId
       };
     } catch (error) {
       if (error instanceof LlmProviderError) {

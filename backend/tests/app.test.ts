@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import { buildApp } from "../src/app.js";
+import { InMemoryConversationRepository } from "../src/conversations/repository.js";
 import { LlmProviderError, type LlmProvider } from "../src/providers/types.js";
 import { parseStreamEvents } from "../src/streaming/events.js";
 
@@ -80,6 +81,81 @@ describe("AI Learning API", () => {
         usage: { input_tokens: 3, output_tokens: 5, thinking_tokens: 0, total_tokens: 8 }
       }
     );
+  });
+
+  it("persists a new conversation when a repository is configured", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const response = await buildApp(stubProvider, undefined, { conversationRepository }).inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: { userId: "user_1", message: "Persist this" }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(typeof body.conversation_id, "string");
+    assert.equal(typeof body.assistant_message_id, "string");
+
+    const messages = await conversationRepository.listMessages(body.conversation_id);
+    assert.deepEqual(
+      messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+        model: message.model,
+        provider: message.provider
+      })),
+      [
+        { role: "user", content: "Persist this", model: null, provider: null },
+        {
+          role: "assistant",
+          content: "Answer to: Persist this",
+          model: "stub-model",
+          provider: "fake"
+        }
+      ]
+    );
+  });
+
+  it("appends to an owned conversation", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const conversation = await conversationRepository.createConversation("user_1");
+
+    const response = await buildApp(stubProvider, undefined, { conversationRepository }).inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        userId: "user_1",
+        conversationId: conversation.id,
+        message: "Continue this"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().conversation_id, conversation.id);
+
+    const messages = await conversationRepository.listMessages(conversation.id);
+    assert.equal(messages.length, 2);
+    assert.equal(messages[0]?.content, "Continue this");
+    assert.equal(messages[1]?.content, "Answer to: Continue this");
+  });
+
+  it("rejects a conversation owned by another user", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const conversation = await conversationRepository.createConversation("user_1");
+
+    const response = await buildApp(stubProvider, undefined, { conversationRepository }).inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        userId: "user_2",
+        conversationId: conversation.id,
+        message: "Can I see it?"
+      }
+    });
+
+    assert.equal(response.statusCode, 404);
+    assert.deepEqual(response.json(), { detail: "Conversation not found" });
+    assert.deepEqual(await conversationRepository.listMessages(conversation.id), []);
   });
 
   it("rejects an empty message", async () => {

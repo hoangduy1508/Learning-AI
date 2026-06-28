@@ -90,6 +90,92 @@ Gemini nhận function declaration cho `get_weather`, nhưng backend vẫn valid
 
 `get_weather` là read-only tool: nó trả dữ liệu và không thay đổi local state. Write tool như `write_file` và `delete_file` cần kiểm soát chặt hơn: authorization, confirmation hoặc cấu hình auto-apply rõ ràng, idempotency và audit logging.
 
+## Order Status Tool
+
+The `get_order_status` tool reads from a fake order store. The model only proposes `orderId`; the backend uses the current authenticated user context to check ownership before returning the order.
+
+Valid input:
+
+```json
+{
+  "orderId": "ord_1001"
+}
+```
+
+Important security rule:
+
+- Do not trust a `userId` from model arguments.
+- Ownership is checked with backend context, currently `currentUserId`.
+- Orders owned by another user return an authorization error.
+- Malformed `orderId` values are rejected by Zod before lookup.
+
+### Tiếng Việt
+
+Tool `get_order_status` đọc từ fake order store. Model chỉ đề xuất `orderId`; backend dùng context user hiện tại đã xác thực để kiểm tra ownership trước khi trả dữ liệu đơn hàng.
+
+Input hợp lệ:
+
+```json
+{
+  "orderId": "ord_1001"
+}
+```
+
+Quy tắc bảo mật quan trọng:
+
+- Không tin `userId` do model gửi trong arguments.
+- Ownership được kiểm tra bằng context backend, hiện là `currentUserId`.
+- Đơn hàng thuộc user khác sẽ trả lỗi authorization.
+- `orderId` sai format bị Zod từ chối trước khi lookup.
+
+## Support Ticket Tool
+
+The `create_support_ticket` tool is a write action. The model can propose a ticket, but the backend does not create it immediately. The backend validates the proposal, creates a pending action, and waits for approval.
+
+Valid proposal:
+
+```json
+{
+  "title": "Invoice download fails",
+  "category": "billing",
+  "priority": "high",
+  "customerEmail": "linh@example.com",
+  "summary": "The customer cannot download the latest invoice from the billing page.",
+  "idempotencyKey": "ticket_invoice_download_fails"
+}
+```
+
+Execution rules:
+
+- The proposal is validated with Zod before entering the pending queue.
+- The backend adds `confirmation: "CREATE_TICKET"` only after approval.
+- `idempotencyKey` prevents duplicate tickets when a request is retried.
+- Audit log redacts email and ticket summary content.
+
+### Tiếng Việt
+
+Tool `create_support_ticket` là write action. Model có thể đề xuất ticket, nhưng backend không tạo ngay. Backend validate proposal, tạo pending action và chờ approval.
+
+Proposal hợp lệ:
+
+```json
+{
+  "title": "Invoice download fails",
+  "category": "billing",
+  "priority": "high",
+  "customerEmail": "linh@example.com",
+  "summary": "The customer cannot download the latest invoice from the billing page.",
+  "idempotencyKey": "ticket_invoice_download_fails"
+}
+```
+
+Quy tắc thực thi:
+
+- Proposal được validate bằng Zod trước khi vào hàng chờ pending.
+- Backend chỉ thêm `confirmation: "CREATE_TICKET"` sau khi user approve.
+- `idempotencyKey` ngăn tạo trùng ticket khi request bị retry.
+- Audit log redact email và nội dung summary của ticket.
+
 ## Run
 
 ```bash
