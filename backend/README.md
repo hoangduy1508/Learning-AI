@@ -71,7 +71,7 @@ npm run build
 npm run learn:tokens
 ```
 
-See [Tokens and Context](docs/TOKENS_AND_CONTEXT.md) for the concepts and interpretation.
+See [Tokens and Context](docs/01_TOKENS_AND_CONTEXT.md) for the concepts and interpretation.
 
 ## Generation controls lab
 
@@ -79,15 +79,15 @@ See [Tokens and Context](docs/TOKENS_AND_CONTEXT.md) for the concepts and interp
 npm run learn:generation
 ```
 
-See [Generation Controls](docs/GENERATION_CONTROLS.md) for system instructions, temperature,
+See [Generation Controls](docs/02_GENERATION_CONTROLS.md) for system instructions, temperature,
 output limits, and stop conditions.
 
 ## Streaming chat
 
 `POST /api/chat/stream` returns `text/event-stream` events with the contract documented in
-[Streaming Chat](docs/STREAMING_CHAT.md).
+[Streaming Chat](docs/03_STREAMING_CHAT.md).
 
 ## Filesystem tools
 
 The backend can list, read, search, write, and delete files inside configured allowlisted roots.
-See [Filesystem Tools](docs/FILESYSTEM_TOOLS.md).
+See [Filesystem Tools](docs/06_FILESYSTEM_TOOLS.md).

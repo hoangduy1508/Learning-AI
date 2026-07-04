@@ -5,6 +5,7 @@ export type StreamEvent =
       type: "start";
       provider: string;
       model: string;
+      conversationId?: string;
     }
   | {
       type: "delta";
@@ -77,4 +78,3 @@ export class StreamEventParser {
     return parseStreamEvents(remaining.endsWith("\n\n") ? remaining : `${remaining}\n\n`);
   }
 }
-

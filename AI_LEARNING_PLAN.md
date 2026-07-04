@@ -172,16 +172,16 @@ Definition of Done:
 Kiến thức:
 
 - [x] Thiết kế bảng conversation và message
-- [ ] Hiểu sliding window, truncation, summarization và compaction
-- [ ] Hiểu retry với exponential backoff và jitter
+- [x] Hiểu sliding window, truncation, summarization và compaction
+- [x] Hiểu retry với exponential backoff và jitter
 - [ ] Hiểu rate limiting
 - [ ] Hiểu model routing, fallback và caching
 
 Thực hành:
 
-- [~] Lưu conversation trong PostgreSQL
-- [ ] Chỉ gửi history cần thiết cho model
-- [ ] Thêm giới hạn message/context
+- [x] Lưu conversation trong PostgreSQL
+- [x] Chỉ gửi history cần thiết cho model
+- [x] Thêm giới hạn message/context
 - [ ] Thêm rate limit theo user
 - [ ] Theo dõi cost theo request và user
 - [ ] Hoàn thiện Project 1
@@ -528,9 +528,9 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: Conversation và Production Basics
 - Current week: Tuần 4
-- Current task: Khởi tạo PostgreSQL runtime thật, chạy migration và smoke test conversation persistence
-- Blockers: Máy hiện tại chưa có Docker CLI trong PATH; gọi `wsl docker --version` báo WSL chưa có distro được cài trong môi trường hiện tại; không có `psql`/`pg_isready`, và không thấy Windows service PostgreSQL local; In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
-- Last updated: 2026-06-28
+- Current task: Học rate limiting và thêm rate limit theo user cho chat endpoint
+- Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
+- Last updated: 2026-07-04
 
 ## Progress Log
 
@@ -585,7 +585,7 @@ Observability / Evaluation / Cost Tracking
 
 ### 2026-06-13 - Token và context window lab
 
-- Thêm script tái sử dụng `npm run learn:tokens` và tài liệu `backend/docs/TOKENS_AND_CONTEXT.md`.
+- Thêm script tái sử dụng `npm run learn:tokens` và tài liệu `backend/docs/01_TOKENS_AND_CONTEXT.md`.
 - Dùng Gemini `countTokens` để đo input trước request và usage metadata để đo usage thực tế sau request.
 - Model `gemini-3.5-flash` báo input context limit 1,048,576 token và output limit 65,536 token tại thời điểm kiểm tra.
 - Prompt tiếng Anh ngắn: 43 ký tự, 8 từ nhưng 11 token; xác nhận token không đồng nhất với từ hoặc ký tự.
@@ -600,7 +600,7 @@ Observability / Evaluation / Cost Tracking
 
 ### 2026-06-13 - Generation controls lab
 
-- Thêm `npm run learn:generation` và tài liệu `backend/docs/GENERATION_CONTROLS.md`.
+- Thêm `npm run learn:generation` và tài liệu `backend/docs/02_GENERATION_CONTROLS.md`.
 - Cùng user prompt, system instruction cho người mới tạo ví dụ nhà hàng; instruction cho senior tập trung contract, boundary và failure mode.
 - Temperature 0 tạo `OmniFind`; hai lần temperature 1.5 tạo `DocuSeek` và `Omni`, xác nhận temperature cao tăng khả năng đa dạng nhưng không phải cam kết determinism.
 - `maxOutputTokens=12` dừng với `MAX_TOKENS` và cắt câu sau 8 output token.
@@ -623,7 +623,7 @@ Observability / Evaluation / Cost Tracking
 - Chuyển model lab sang `gemini-2.5-flash` vì `gemini-3.5-flash` trả `503 UNAVAILABLE` khi high demand; model 2.5 streaming ổn định hơn cho bài học.
 - Smoke test thật qua `/api/chat/stream` thành công với event `start -> delta -> usage -> end`.
 - Usage smoke test: provider `gemini`, model `gemini-2.5-flash`, 26 input tokens, 4 output tokens, 65 thinking tokens, 95 total tokens, latency khoảng 1117 ms.
-- Thêm tài liệu song ngữ `backend/docs/STREAMING_CHAT.md`.
+- Thêm tài liệu song ngữ `backend/docs/03_STREAMING_CHAT.md`.
 - Kiểm chứng: typecheck, build và 11 automated tests thành công.
 - Task tiếp theo: tạo ReactJS UI đọc streaming `fetch`, hiển thị delta và thêm Stop generating bằng `AbortController`.
 
@@ -652,7 +652,7 @@ Observability / Evaluation / Cost Tracking
 - Sửa lỗi bảo mật trong config: không dùng `z.coerce.boolean()` cho env boolean vì chuỗi `"false"` có thể bị hiểu thành truthy.
 - Thêm tests filesystem: list/read/search, chặn path ngoài root, chặn write khi chưa bật, write/delete khi bật.
 - Xác minh thực tế bằng Fastify inject: backend thấy root `E:\Project\3sdesign`, write/delete enabled và list root trả 24 entries.
-- Thêm tài liệu song ngữ `backend/docs/FILESYSTEM_TOOLS.md`.
+- Thêm tài liệu song ngữ `backend/docs/06_FILESYSTEM_TOOLS.md`.
 - Kiểm chứng: backend typecheck, 15 automated tests và build đều thành công.
 - Task tiếp theo: expose các filesystem operations này thành LLM tools để model có thể đề xuất `list/read/search/write/delete`, nhưng backend vẫn giữ quyền thực thi và confirmation.
 
@@ -698,7 +698,7 @@ Observability / Evaluation / Cost Tracking
 
 ### 2026-06-27 - Structured output và Zod parsing
 
-- Học và ghi chú sự khác nhau giữa JSON Schema, JSON mode, schema-constrained output, structured output và tool calling trong `backend/docs/STRUCTURED_OUTPUT.md`.
+- Học và ghi chú sự khác nhau giữa JSON Schema, JSON mode, schema-constrained output, structured output và tool calling trong `backend/docs/04_STRUCTURED_OUTPUT.md`.
 - Thêm module `backend/src/structured/support-ticket.ts` để build prompt support ticket, parse JSON object từ model text và validate runtime bằng Zod.
 - Thêm endpoint `POST /api/structured/support-ticket` trả typed support ticket khi output hợp lệ và trả `422` khi model trả malformed JSON hoặc JSON sai domain schema.
 - Parser chấp nhận JSON thuần hoặc JSON bị bọc trong markdown fence, nhưng vẫn coi toàn bộ model output là untrusted input.
@@ -712,7 +712,7 @@ Observability / Evaluation / Cost Tracking
 - Tạo module `backend/src/agent/weather-tool.ts` với Zod schema cho arguments: `location` bắt buộc và `unit` chỉ được là `celsius` hoặc `fahrenheit`.
 - Tool thời tiết là fake/deterministic, không gọi API bên ngoài, phù hợp cho bài học tool calling và automated tests không cần network.
 - Backend validate arguments trước khi execute; malformed arguments từ model bị reject và audit log ghi trạng thái `error`.
-- Thêm tài liệu song ngữ `backend/docs/TOOL_CALLING.md` giải thích tool calling, fake weather tool, validation boundary và khác biệt read-only/write tool.
+- Thêm tài liệu song ngữ `backend/docs/05_TOOL_CALLING.md` giải thích tool calling, fake weather tool, validation boundary và khác biệt read-only/write tool.
 - Thêm tests cho tool call thành công, malformed weather arguments và audit log.
 - Kiểm chứng backend: `npm run typecheck`, `npm test` 25 tests pass, `npm run build`.
 - Task tiếp theo: tạo tool đọc trạng thái đơn hàng bằng Zod schema và test authorization/validation trước khi gọi tool.
@@ -723,7 +723,7 @@ Observability / Evaluation / Cost Tracking
 - Tạo module `backend/src/agent/order-tool.ts` với Zod schema cho `orderId` dạng `ord_...` và fake order store deterministic.
 - Backend kiểm tra ownership bằng `currentUserId` của service, không tin `userId` do model có thể gửi trong tool arguments.
 - Tool trả trạng thái đơn hàng chỉ khi order thuộc user hiện tại; order của user khác bị chặn với authorization error.
-- Cập nhật tài liệu song ngữ `backend/docs/TOOL_CALLING.md` với phần Order Status Tool và validation/authorization boundary.
+- Cập nhật tài liệu song ngữ `backend/docs/05_TOOL_CALLING.md` với phần Order Status Tool và validation/authorization boundary.
 - Thêm tests cho order thuộc user hiện tại, order thuộc user khác, malformed `orderId` và audit log.
 - Kiểm chứng backend: `npm run typecheck`, `npm test` 28 tests pass, `npm run build`.
 - Task tiếp theo: tạo tool tạo support ticket với confirmation/idempotency cho write action và test validation.
@@ -736,7 +736,7 @@ Observability / Evaluation / Cost Tracking
 - Tool tạo support ticket luôn yêu cầu approval, không auto-apply theo cấu hình file tool; backend chỉ thêm `confirmation: "CREATE_TICKET"` sau khi approve.
 - Thêm `idempotencyKey` để retry cùng một ticket không tạo bản ghi trùng; store trả lại cùng `ticketId` với `deduplicated: true`.
 - Audit log redact `customerEmail` và `summary` để tránh lưu PII/nội dung ticket nhạy cảm.
-- Cập nhật tài liệu song ngữ `backend/docs/TOOL_CALLING.md` với phần Support Ticket Tool, confirmation và idempotency.
+- Cập nhật tài liệu song ngữ `backend/docs/05_TOOL_CALLING.md` với phần Support Ticket Tool, confirmation và idempotency.
 - Thêm tests cho pending approval, approve tạo ticket, idempotency dedupe, malformed proposal và audit log.
 - Kiểm chứng backend: `npm run typecheck`, `npm test` 32 tests pass, `npm run build`.
 - Hoàn thành toàn bộ thực hành Tuần 3 về structured output và tool calling.
@@ -751,7 +751,7 @@ Observability / Evaluation / Cost Tracking
 - Thêm `ConversationRepository` contract và `InMemoryConversationRepository` để test persistence flow không cần PostgreSQL runtime.
 - Nối optional `conversationRepository` vào `POST /api/chat`: request mới tạo conversation, request có `conversationId` append vào conversation nếu đúng owner.
 - Backend không tin `conversationId` trần từ client; kiểm tra `userId` ownership trước khi append message và trả `404` nếu conversation không thuộc user hiện tại.
-- Thêm tài liệu `backend/docs/CONVERSATION_PERSISTENCE.md` mô tả schema, trust boundary và bước tiếp theo.
+- Thêm tài liệu `backend/docs/08_CONVERSATION_PERSISTENCE.md` mô tả schema, trust boundary và bước tiếp theo.
 - Kiểm chứng backend: `npm run typecheck`, `npm test` 35 tests pass, `npm run build`.
 - Chưa hoàn tất PostgreSQL runtime thật vì project chưa có driver/Drizzle/Docker Compose cho database; checklist phần lưu PostgreSQL để `[~]`.
 - Task tiếp theo: thêm PostgreSQL repository implementation bằng `pg` hoặc Drizzle, cấu hình connection env, chạy migration và test conversation persistence với database thật.
@@ -765,7 +765,7 @@ Observability / Evaluation / Cost Tracking
 - Nối server với PostgreSQL khi có `DATABASE_URL`; hỗ trợ `DATABASE_SSL` và `DATABASE_RUN_MIGRATIONS`.
 - Cập nhật `.env.example` với cấu hình database mẫu.
 - Thêm tests `backend/tests/conversation-postgres.test.ts` cho migration SQL, parameter binding, ownership query và mapping usage metadata.
-- Cập nhật `backend/docs/CONVERSATION_PERSISTENCE.md` với cách bật persistence thật.
+- Cập nhật `backend/docs/08_CONVERSATION_PERSISTENCE.md` với cách bật persistence thật.
 - Kiểm chứng backend: `npm run typecheck`, `npm test` 40 tests pass, `npm run build`.
 - Chưa chạy integration test với PostgreSQL container thật; hiện kiểm chứng bằng fake queryable để automated suite không phụ thuộc database local.
 - Task tiếp theo: học sliding window/truncation/summarization/compaction và chỉ gửi history cần thiết cho model.
@@ -774,7 +774,7 @@ Observability / Evaluation / Cost Tracking
 
 - Thêm `docker-compose.yml` ở root để chạy PostgreSQL 16 local với database `ai_learning`.
 - Thêm script `npm run smoke:conversation-db` tại backend để chạy migration, gửi 2 request `/api/chat`, xác nhận 4 message được persist và wrong-owner bị chặn `404`.
-- Cập nhật `backend/docs/CONVERSATION_PERSISTENCE.md` với lệnh chạy Docker Compose và smoke test.
+- Cập nhật `backend/docs/08_CONVERSATION_PERSISTENCE.md` với lệnh chạy Docker Compose và smoke test.
 - Tạm giữ checklist `Lưu conversation trong PostgreSQL` ở trạng thái `[~]` vì chưa smoke test được với database runtime thật.
 - Kiểm chứng code không cần DB thật: `npm run typecheck`, `npm test` 40 tests pass, `npm run build`.
 - Thử chạy `docker --version` nhưng máy báo không có lệnh `docker`.
@@ -783,6 +783,47 @@ Observability / Evaluation / Cost Tracking
 - Thử chạy `npm run smoke:conversation-db`; script dừng đúng guard vì chưa có `DATABASE_URL`.
 - Vấn đề còn lại: cần cài Docker Desktop hoặc PostgreSQL local, sau đó chạy `docker compose up -d postgres` hoặc cung cấp `DATABASE_URL` tới PostgreSQL thật.
 - Task tiếp theo: sau khi có Docker/PostgreSQL runtime trong Windows hoặc WSL, chạy `docker compose up -d postgres` từ root repo và `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/ai_learning npm run smoke:conversation-db`, rồi mới đánh dấu `[x]`.
+
+### 2026-07-04 - Sliding window context cho conversation history
+
+- Kiểm tra lại PostgreSQL runtime thật: `docker` và `psql` vẫn chưa có trong PATH, không thấy Windows service `postgresql*`; smoke test database thật tiếp tục bị chặn bởi môi trường.
+- Giữ checklist `Lưu conversation trong PostgreSQL` ở trạng thái `[~]` vì repository/migration/smoke script đã có nhưng chưa chạy được với runtime thật.
+- Thêm `backend/src/conversations/context.ts` để chọn history bằng sliding window: mặc định tối đa 12 message gần nhất, budget history 2,000 estimated token và truncate từng message quá dài.
+- `/api/chat` giờ đọc các message cũ của conversation trước khi append message mới, render history đã cắt gọn vào prompt, rồi mới gọi provider.
+- History được đóng trong `<conversation_history>` và ghi rõ là untrusted conversation content, không phải system instruction.
+- Message gốc vẫn được lưu nguyên vào repository; chỉ prompt gửi sang provider mới chứa history đã giới hạn.
+- Thêm test route xác nhận request thứ hai trong cùng conversation gửi history cũ cho provider.
+- Thêm `backend/tests/conversation-context.test.ts` kiểm chứng giữ message gần nhất theo đúng thứ tự, bỏ message cũ khi vượt budget và render current user message tách khỏi history.
+- Cập nhật `backend/docs/08_CONVERSATION_PERSISTENCE.md` với context window policy và bước tiếp theo là summarization/compaction.
+- Kiểm chứng: `npm run typecheck` thành công; `npm test` có 44 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ thuộc sandbox user khác gây EPERM khi ghi đè.
+- Hoàn thành task `Hiểu sliding window, truncation, summarization và compaction`, `Chỉ gửi history cần thiết cho model` và `Thêm giới hạn message/context`.
+- Task tiếp theo: học retry với exponential backoff/jitter và thêm retry policy có test cho provider call.
+
+### 2026-07-04 - Cài Docker Engine trong WSL và smoke test PostgreSQL thật
+
+- Xác nhận Ubuntu WSL đang chạy với user `duyunh`, Ubuntu 26.04 và WSL2.
+- Cài Docker Engine trong Ubuntu WSL theo Docker apt repository chính thức: `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin` và `docker-compose-plugin`.
+- Bật Docker daemon trong WSL và thêm user `duyunh` vào group `docker`.
+- Kiểm chứng Docker: `docker --version` trả Docker 29.6.1, `docker compose version` trả v5.3.0 và `docker run --rm hello-world` thành công.
+- Chạy `docker compose up -d postgres` từ `/mnt/e/Project/AI-learning`; container `ai_learning_postgres` publish port `5432` và healthcheck chuyển sang `healthy`.
+- Chạy smoke test thật từ `backend/` với `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/ai_learning` và `DATABASE_RUN_MIGRATIONS=true`.
+- Smoke test conversation DB thành công: migration chạy được, 2 request `/api/chat` persist 4 message theo thứ tự `user, assistant, user, assistant`, và wrong-owner request bị chặn `404`.
+- Đánh dấu checklist `Lưu conversation trong PostgreSQL` thành `[x]`.
+- Task tiếp theo vẫn là học retry với exponential backoff/jitter và thêm retry policy có test cho provider call.
+
+### 2026-07-04 - Retry với exponential backoff và jitter
+
+- Thêm `retryable` metadata vào `LlmProviderError` để phân biệt lỗi tạm thời với lỗi không nên retry.
+- Đánh dấu timeout, rate limit và một số lỗi provider 5xx tạm thời là retryable trong Gemini/OpenAI adapter; auth, permission và insufficient quota vẫn fail nhanh.
+- Thêm `backend/src/providers/retry.ts` với retry policy dùng exponential backoff, max delay và jitter.
+- Thêm cấu hình `.env`: `LLM_RETRY_MAX_ATTEMPTS`, `LLM_RETRY_BASE_DELAY_MS`, `LLM_RETRY_MAX_DELAY_MS` và `LLM_RETRY_JITTER_RATIO`.
+- Nối retry policy vào `/api/chat`; khi retry, backend log attempt hiện tại, attempt kế tiếp và delay dự kiến.
+- Thêm `backend/tests/retry.test.ts` kiểm chứng tính delay, retry lỗi retryable tới khi thành công và không retry lỗi non-retryable.
+- Thêm route test xác nhận `/api/chat` retry provider failure tạm thời 2 lần rồi trả answer thành công ở lần thứ 3.
+- Cập nhật `backend/docs/08_CONVERSATION_PERSISTENCE.md` với ghi chú retry policy.
+- Kiểm chứng: `npm run typecheck` thành công; `npm test` có 49 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ thuộc sandbox user khác gây EPERM khi ghi đè.
+- Hoàn thành task `Hiểu retry với exponential backoff và jitter`.
+- Task tiếp theo: học rate limiting và thêm rate limit theo user cho chat endpoint.
 
 ## Session Notes Template
 

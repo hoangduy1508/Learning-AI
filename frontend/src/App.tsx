@@ -32,6 +32,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<{ provider: string; model: string } | null>(null);
   const [usage, setUsage] = useState<UsageView | null>(null);
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [agentMessage, setAgentMessage] = useState(
@@ -67,6 +68,7 @@ export default function App() {
     try {
       await streamChat({
         message: trimmedMessage,
+        conversationId,
         signal: abortController.signal,
         onEvent: handleStreamEvent
       });
@@ -90,6 +92,9 @@ export default function App() {
   function handleStreamEvent(event: StreamEvent) {
     if (event.type === "start") {
       setMetadata({ provider: event.provider, model: event.model });
+      if (event.conversationId) {
+        setConversationId(event.conversationId);
+      }
     }
 
     if (event.type === "delta") {
@@ -211,6 +216,7 @@ export default function App() {
             status={status}
             stopGenerating={stopGenerating}
             usage={usage}
+            conversationId={conversationId}
           />
         ) : (
           <FileAgentView
@@ -243,6 +249,7 @@ interface StreamingChatViewProps {
   status: StreamStatus;
   stopGenerating(): void;
   usage: UsageView | null;
+  conversationId?: string;
 }
 
 function StreamingChatView(props: StreamingChatViewProps) {
@@ -270,6 +277,7 @@ function StreamingChatView(props: StreamingChatViewProps) {
       <section className="answer-card" aria-live="polite">
         <div className="answer-header">
           <span>Status: {props.status}</span>
+          {props.conversationId ? <span>Conversation: {props.conversationId.slice(0, 8)}</span> : null}
           {props.metadata ? (
             <span>
               {props.metadata.provider} / {props.metadata.model}

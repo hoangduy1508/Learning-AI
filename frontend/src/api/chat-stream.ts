@@ -2,6 +2,7 @@ import { StreamEventParser, type StreamEvent } from "../lib/stream-events";
 
 interface StreamChatOptions {
   message: string;
+  conversationId?: string;
   signal: AbortSignal;
   onEvent(event: StreamEvent): void;
 }
@@ -10,7 +11,10 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
   const response = await fetch("/api/chat/stream", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ message: options.message }),
+    body: JSON.stringify({
+      message: options.message,
+      conversationId: options.conversationId
+    }),
     signal: options.signal
   });
 

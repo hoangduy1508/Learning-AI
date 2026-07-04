@@ -1,0 +1,86 @@
+
+> ai-learning-backend@0.1.0 dev
+> tsx watch src/server.ts
+
+{"level":30,"time":1783177747928,"pid":26760,"hostname":"DESKTOP-CQKRGR9","msg":"Server listening at http://127.0.0.1:8000"}
+AI Learning API listening on http://127.0.0.1:8000
+{"level":30,"time":1783177753183,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-1","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":61910},"msg":"incoming request"}
+{"level":30,"time":1783177753186,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-1","res":{"statusCode":200},"responseTime":2.6237999945878983,"msg":"request completed"}
+{"level":30,"time":1783177753186,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-2","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":61911},"msg":"incoming request"}
+{"level":30,"time":1783177753186,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-2","res":{"statusCode":200},"responseTime":0.16179999709129333,"msg":"request completed"}
+{"level":30,"time":1783177753189,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-3","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":61912},"msg":"incoming request"}
+{"level":30,"time":1783177753190,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-3","res":{"statusCode":200},"responseTime":0.16820000112056732,"msg":"request completed"}
+{"level":30,"time":1783177753190,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-4","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":61913},"msg":"incoming request"}
+{"level":30,"time":1783177753190,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-4","res":{"statusCode":200},"responseTime":0.11089999973773956,"msg":"request completed"}
+{"level":30,"time":1783177756478,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-5","req":{"method":"POST","url":"/api/chat/stream","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":52007},"msg":"incoming request"}
+{"level":30,"time":1783177758428,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-5","event":{"type":"metadata","provider":"gemini","model":"gemini-2.5-flash"},"msg":"Streaming event received"}
+{"level":30,"time":1783177758431,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-5","event":{"type":"delta","text":"HTTP streaming gửi dữ liệu từng phần theo thời gian qua một kết nối mở, thay vì đợi toàn bộ phản hồi hoàn"},"msg":"Streaming event received"}
+{"level":30,"time":1783177758432,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-5","event":{"type":"delta","text":" tất. Điều này cho phép truyền tải nội dung động theo thời gian thực hoặc xử lý dữ liệu lớn một cách hiệu quả hơn."},"msg":"Streaming event received"}
+{"level":30,"time":1783177758465,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-5","event":{"type":"usage","usage":{"inputTokens":31,"outputTokens":52,"thinkingTokens":133,"totalTokens":216}},"msg":"Streaming event received"}
+{"level":30,"time":1783177758465,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-5","res":{"statusCode":200},"responseTime":1986.7472000047565,"msg":"request completed"}
+{"level":30,"time":1783177760743,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-6","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":59630},"msg":"incoming request"}
+{"level":30,"time":1783177760743,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-6","res":{"statusCode":200},"responseTime":0.28869999945163727,"msg":"request completed"}
+{"level":30,"time":1783177760744,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-7","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":59629},"msg":"incoming request"}
+{"level":30,"time":1783177760744,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-7","res":{"statusCode":200},"responseTime":0.5318999961018562,"msg":"request completed"}
+{"level":30,"time":1783177760746,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-8","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":59631},"msg":"incoming request"}
+{"level":30,"time":1783177760746,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-8","res":{"statusCode":200},"responseTime":0.2897999957203865,"msg":"request completed"}
+{"level":30,"time":1783177760748,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-9","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":59436},"msg":"incoming request"}
+{"level":30,"time":1783177760748,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-9","res":{"statusCode":200},"responseTime":0.3815999999642372,"msg":"request completed"}
+{"level":30,"time":1783177768012,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-a","req":{"method":"POST","url":"/api/agent/chat","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":51279},"msg":"incoming request"}
+{"level":30,"time":1783177770540,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-a","res":{"statusCode":200},"responseTime":2528.136299997568,"msg":"request completed"}
+{"level":30,"time":1783177770543,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-b","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":59625},"msg":"incoming request"}
+{"level":30,"time":1783177770544,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-b","res":{"statusCode":200},"responseTime":0.22430000454187393,"msg":"request completed"}
+{"level":30,"time":1783177770554,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-c","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":53508},"msg":"incoming request"}
+{"level":30,"time":1783177770554,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-c","res":{"statusCode":200},"responseTime":0.23579999804496765,"msg":"request completed"}
+{"level":30,"time":1783177787175,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-d","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":53539},"msg":"incoming request"}
+{"level":30,"time":1783177787175,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-d","res":{"statusCode":200},"responseTime":0.19680000096559525,"msg":"request completed"}
+{"level":30,"time":1783177787175,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-e","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":53540},"msg":"incoming request"}
+{"level":30,"time":1783177787175,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-e","res":{"statusCode":200},"responseTime":0.18609999865293503,"msg":"request completed"}
+{"level":30,"time":1783177787179,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-f","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":54665},"msg":"incoming request"}
+{"level":30,"time":1783177787179,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-f","res":{"statusCode":200},"responseTime":0.16860000044107437,"msg":"request completed"}
+{"level":30,"time":1783177787180,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-g","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":54666},"msg":"incoming request"}
+{"level":30,"time":1783177787180,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-g","res":{"statusCode":200},"responseTime":0.2175000011920929,"msg":"request completed"}
+{"level":30,"time":1783177794867,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-h","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":53459},"msg":"incoming request"}
+{"level":30,"time":1783177794868,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-h","res":{"statusCode":200},"responseTime":0.3206000030040741,"msg":"request completed"}
+{"level":30,"time":1783177795660,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-i","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":52796},"msg":"incoming request"}
+{"level":30,"time":1783177795660,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-i","res":{"statusCode":200},"responseTime":0.2629000023007393,"msg":"request completed"}
+{"level":30,"time":1783177796212,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-j","req":{"method":"POST","url":"/api/agent/chat","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":55843},"msg":"incoming request"}
+{"level":30,"time":1783177798785,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-j","res":{"statusCode":200},"responseTime":2572.9897000044584,"msg":"request completed"}
+{"level":30,"time":1783177798789,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-k","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":59074},"msg":"incoming request"}
+{"level":30,"time":1783177798790,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-k","res":{"statusCode":200},"responseTime":0.6374999955296516,"msg":"request completed"}
+{"level":30,"time":1783177798794,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-l","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":58888},"msg":"incoming request"}
+{"level":30,"time":1783177798794,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-l","res":{"statusCode":200},"responseTime":0.18890000134706497,"msg":"request completed"}
+{"level":30,"time":1783177820931,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-m","req":{"method":"GET","url":"/health","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":55132},"msg":"incoming request"}
+{"level":30,"time":1783177820931,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-m","res":{"statusCode":200},"responseTime":0.44700000435113907,"msg":"request completed"}
+{"level":30,"time":1783177875392,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-n","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":59804},"msg":"incoming request"}
+{"level":30,"time":1783177875392,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-n","res":{"statusCode":200},"responseTime":0.21090000122785568,"msg":"request completed"}
+{"level":30,"time":1783177875392,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-o","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":59805},"msg":"incoming request"}
+{"level":30,"time":1783177875392,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-o","res":{"statusCode":200},"responseTime":0.17629999667406082,"msg":"request completed"}
+{"level":30,"time":1783177875395,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-p","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":61083},"msg":"incoming request"}
+{"level":30,"time":1783177875396,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-p","res":{"statusCode":200},"responseTime":0.2656000033020973,"msg":"request completed"}
+{"level":30,"time":1783177875396,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-q","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":61084},"msg":"incoming request"}
+{"level":30,"time":1783177875397,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-q","res":{"statusCode":200},"responseTime":0.23799999803304672,"msg":"request completed"}
+{"level":30,"time":1783177978833,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-r","req":{"method":"POST","url":"/api/agent/chat","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":55803},"msg":"incoming request"}
+{"level":30,"time":1783177989938,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-r","res":{"statusCode":200},"responseTime":11104.56059999764,"msg":"request completed"}
+{"level":30,"time":1783177989941,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-s","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":49867},"msg":"incoming request"}
+{"level":30,"time":1783177989942,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-s","res":{"statusCode":200},"responseTime":0.15569999814033508,"msg":"request completed"}
+{"level":30,"time":1783177989948,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-t","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":61686},"msg":"incoming request"}
+{"level":30,"time":1783177989948,"pid":26760,"hostname":"DESKTOP-CQKRGR9","reqId":"req-t","res":{"statusCode":200},"responseTime":0.21169999986886978,"msg":"request completed"}
+10:14:47 PM [tsx] change in ./src\streaming\events.ts Restarting...
+c{"level":30,"time":1783178088218,"pid":33212,"hostname":"DESKTOP-CQKRGR9","msg":"Server listening at http://127.0.0.1:8000"}
+AI Learning API listening on http://127.0.0.1:8000
+10:15:02 PM [tsx] change in ./src\app.ts Restarting...
+c{"level":30,"time":1783178103687,"pid":34628,"hostname":"DESKTOP-CQKRGR9","msg":"Server listening at http://127.0.0.1:8000"}
+AI Learning API listening on http://127.0.0.1:8000
+{"level":30,"time":1783178124372,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-1","req":{"method":"GET","url":"/api/agent/pending","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":53571},"msg":"incoming request"}
+{"level":30,"time":1783178124375,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-1","res":{"statusCode":200},"responseTime":2.9280000030994415,"msg":"request completed"}
+{"level":30,"time":1783178124376,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-2","req":{"method":"GET","url":"/api/agent/audit","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":53572},"msg":"incoming request"}
+{"level":30,"time":1783178124376,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-2","res":{"statusCode":200},"responseTime":0.29330000281333923,"msg":"request completed"}
+{"level":30,"time":1783178284846,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-3","req":{"method":"GET","url":"/health","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":50467},"msg":"incoming request"}
+{"level":30,"time":1783178284846,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-3","res":{"statusCode":200},"responseTime":0.35099999606609344,"msg":"request completed"}
+{"level":30,"time":1783178294744,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-4","req":{"method":"POST","url":"/api/chat/stream","host":"127.0.0.1:8000","remoteAddress":"127.0.0.1","remotePort":50473},"msg":"incoming request"}
+{"level":30,"time":1783178298832,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-4","event":{"type":"metadata","provider":"gemini","model":"gemini-2.5-flash"},"msg":"Streaming event received"}
+{"level":30,"time":1783178298834,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-4","event":{"type":"delta","text":"**Prompt:** Change a UI element's state (e.g., toggle, input,"},"msg":"Streaming event received"}
+{"level":30,"time":1783178298834,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-4","event":{"type":"delta","text":" selection). Restart the application. Is the state preserved?"},"msg":"Streaming event received"}
+{"level":30,"time":1783178298874,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-4","event":{"type":"usage","usage":{"inputTokens":23,"outputTokens":30,"thinkingTokens":585,"totalTokens":638}},"msg":"Streaming event received"}
+{"level":30,"time":1783178298880,"pid":34628,"hostname":"DESKTOP-CQKRGR9","reqId":"req-4","res":{"statusCode":200},"responseTime":4135.306200005114,"msg":"request completed"}

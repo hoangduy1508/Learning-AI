@@ -15,6 +15,38 @@ Schema SQL nam tai `backend/src/conversations/schema.sql`.
 - Model khong duoc quyet dinh `userId`, `conversationId` hay ownership. Day la application state.
 - Message cua user duoc luu sau khi request hop le. Message cua assistant chi duoc luu khi provider tra loi thanh cong.
 - Usage duoc luu tren assistant message de tinh cost theo request/user ve sau.
+- History cu la untrusted conversation content. Khi render history vao prompt, backend tach history khoi current user message va noi ro no khong phai system instruction.
+
+## Context window policy
+
+`backend/src/conversations/context.ts` chon history bang sliding window don gian:
+
+- Chi lay cac message gan nhat, mac dinh toi da 12 message.
+- Uoc tinh token theo ky tu de co guardrail truoc khi goi provider.
+- Dung budget history mac dinh 2,000 estimated token.
+- Message rieng le qua dai bi truncate phan dau va giu lai phan cuoi gan day.
+- Current user message khong bi thay doi khi luu database; chi prompt gui sang provider moi duoc render kem history da cat gon.
+
+Day chua phai summarization hoac compaction day du. Khi conversation dai hon nua, buoc tiep theo la tao summary message rieng, luu summary vao application state va ket hop summary + sliding window gan nhat.
+
+## Retry policy
+
+`backend/src/providers/retry.ts` boc provider call bang retry policy:
+
+- Mac dinh toi da 3 attempts, tinh ca lan goi dau tien.
+- Delay tang theo exponential backoff: base delay, gap doi theo moi lan fail va cap boi max delay.
+- Jitter them giao dong nho de tranh nhieu request retry cung luc.
+- Chi retry `LlmProviderError` co `retryable: true`.
+- Timeout, rate limit va mot so loi 5xx tam thoi duoc coi la retryable. Auth, permission, insufficient quota va validation/schema error khong retry.
+
+Cac bien moi truong co the chinh policy:
+
+```text
+LLM_RETRY_MAX_ATTEMPTS=3
+LLM_RETRY_BASE_DELAY_MS=250
+LLM_RETRY_MAX_DELAY_MS=2000
+LLM_RETRY_JITTER_RATIO=0.2
+```
 
 ## PostgreSQL shape
 

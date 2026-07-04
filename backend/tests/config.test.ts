@@ -47,4 +47,18 @@ describe("multi-provider configuration", () => {
     assert.equal(config.DATABASE_SSL, true);
     assert.equal(config.DATABASE_RUN_MIGRATIONS, false);
   });
+
+  it("parses LLM retry configuration", () => {
+    const config = loadConfig({
+      LLM_RETRY_MAX_ATTEMPTS: "4",
+      LLM_RETRY_BASE_DELAY_MS: "100",
+      LLM_RETRY_MAX_DELAY_MS: "1500",
+      LLM_RETRY_JITTER_RATIO: "0.35"
+    });
+
+    assert.equal(config.LLM_RETRY_MAX_ATTEMPTS, 4);
+    assert.equal(config.LLM_RETRY_BASE_DELAY_MS, 100);
+    assert.equal(config.LLM_RETRY_MAX_DELAY_MS, 1500);
+    assert.equal(config.LLM_RETRY_JITTER_RATIO, 0.35);
+  });
 });

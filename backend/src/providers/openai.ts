@@ -51,13 +51,22 @@ export class OpenAiLlmProvider implements LlmProvider {
         throw error;
       }
       if (error instanceof OpenAI.APIConnectionTimeoutError) {
-        throw new LlmProviderError("The LLM provider timed out", { cause: error });
+        throw new LlmProviderError("The LLM provider timed out", {
+          cause: error,
+          retryable: true
+        });
       }
       if (error instanceof OpenAI.RateLimitError && error.code === "insufficient_quota") {
         throw new LlmProviderError(
           "OpenAI quota is unavailable. Check API billing and usage limits.",
           { cause: error }
         );
+      }
+      if (error instanceof OpenAI.RateLimitError) {
+        throw new LlmProviderError("OpenAI rate limit exceeded. Try again later.", {
+          cause: error,
+          retryable: true
+        });
       }
       throw new LlmProviderError("The LLM provider request failed", { cause: error });
     }

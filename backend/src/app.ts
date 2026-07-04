@@ -2,9 +2,11 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { registerAgentRoutes } from "./agent/routes.js";
+import { buildConversationPrompt } from "./conversations/context.js";
 import type { AppConfig } from "./config.js";
 import type { ConversationRepository } from "./conversations/repository.js";
 import { registerFileRoutes } from "./filesystem/routes.js";
+import { defaultRetryPolicy, retryLlmProviderCall, type RetryPolicy } from "./providers/retry.js";
 import type { LlmProvider } from "./providers/types.js";
 import { LlmProviderError } from "./providers/types.js";
 import {
@@ -22,6 +24,8 @@ const chatRequestSchema = z.object({
 
 interface BuildAppOptions {
   conversationRepository?: ConversationRepository;
+  retryPolicy?: RetryPolicy;
+  retrySleep?: (delayMs: number) => Promise<void>;
 }
 
 export function buildApp(
@@ -31,6 +35,15 @@ export function buildApp(
 ): FastifyInstance {
   const app = Fastify({ logger: true });
   const conversationRepository = options.conversationRepository;
+  const retryPolicy = options.retryPolicy ??
+    (config
+      ? {
+          maxAttempts: config.LLM_RETRY_MAX_ATTEMPTS,
+          baseDelayMs: config.LLM_RETRY_BASE_DELAY_MS,
+          maxDelayMs: config.LLM_RETRY_MAX_DELAY_MS,
+          jitterRatio: config.LLM_RETRY_JITTER_RATIO
+        }
+      : defaultRetryPolicy);
 
   app.get("/health", async () => ({ status: "ok" }));
   if (config) {
@@ -64,6 +77,11 @@ export function buildApp(
         return reply.status(404).send({ detail: "Conversation not found" });
       }
 
+      const previousMessages =
+        conversationRepository && conversation
+          ? await conversationRepository.listMessages(conversation.id)
+          : [];
+
       if (conversationRepository && conversation) {
         await conversationRepository.addMessage({
           conversationId: conversation.id,
@@ -72,7 +90,17 @@ export function buildApp(
         });
       }
 
-      const result = await provider.generate(parsedRequest.data.message);
+      const providerMessage = buildConversationPrompt(previousMessages, parsedRequest.data.message);
+      const result = await retryLlmProviderCall(() => provider.generate(providerMessage), {
+        ...retryPolicy,
+        sleep: options.retrySleep,
+        onRetry: ({ attempt, delayMs, error }) => {
+          request.log.warn(
+            { attempt, nextAttempt: attempt + 1, delayMs, error },
+            "Retrying LLM request after retryable provider error"
+          );
+        }
+      });
       const latencyMs = Math.round(performance.now() - startedAt);
 
       let assistantMessageId: string | undefined;
@@ -146,7 +174,40 @@ export function buildApp(
     const startedAt = performance.now();
 
     try {
-      for await (const event of provider.stream(parsedRequest.data.message, {
+      const conversation = conversationRepository
+        ? parsedRequest.data.conversationId
+          ? await conversationRepository.findConversationForUser(
+              parsedRequest.data.conversationId,
+              parsedRequest.data.userId
+            )
+          : await conversationRepository.createConversation(parsedRequest.data.userId)
+        : null;
+
+      if (conversationRepository && !conversation) {
+        reply.raw.write(encodeStreamEvent({ type: "error", message: "Conversation not found" }));
+        return;
+      }
+
+      const previousMessages =
+        conversationRepository && conversation
+          ? await conversationRepository.listMessages(conversation.id)
+          : [];
+
+      if (conversationRepository && conversation) {
+        await conversationRepository.addMessage({
+          conversationId: conversation.id,
+          role: "user",
+          content: parsedRequest.data.message
+        });
+      }
+
+      const providerMessage = buildConversationPrompt(previousMessages, parsedRequest.data.message);
+      let assistantText = "";
+      let providerName: "fake" | "openai" | "gemini" | null = null;
+      let modelName: string | null = null;
+      let usage = null as Awaited<ReturnType<LlmProvider["generate"]>>["usage"] | null;
+
+      for await (const event of provider.stream(providerMessage, {
         signal: abortController.signal
       })) {
         request.log.info({ event }, "Streaming event received");
@@ -155,20 +216,25 @@ export function buildApp(
         }
 
         if (event.type === "metadata") {
+          providerName = event.provider;
+          modelName = event.model;
           reply.raw.write(
             encodeStreamEvent({
               type: "start",
               provider: event.provider,
-              model: event.model
+              model: event.model,
+              conversationId: conversation?.id
             })
           );
         }
 
         if (event.type === "delta") {
+          assistantText += event.text;
           reply.raw.write(encodeStreamEvent({ type: "delta", text: event.text }));
         }
 
         if (event.type === "usage") {
+          usage = event.usage;
           reply.raw.write(
             encodeStreamEvent({
               type: "usage",
@@ -180,6 +246,16 @@ export function buildApp(
       }
 
       if (!abortController.signal.aborted) {
+        if (conversationRepository && conversation && assistantText && providerName && modelName && usage) {
+          await conversationRepository.addMessage({
+            conversationId: conversation.id,
+            role: "assistant",
+            content: assistantText,
+            provider: providerName,
+            model: modelName,
+            usage
+          });
+        }
         reply.raw.write(encodeStreamEvent({ type: "end" }));
       }
     } catch (error) {

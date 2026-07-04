@@ -17,10 +17,17 @@ export interface LlmProvider {
   stream(message: string, options?: { signal?: AbortSignal }): AsyncGenerator<LlmStreamEvent>;
 }
 
+interface LlmProviderErrorOptions extends ErrorOptions {
+  retryable?: boolean;
+}
+
 export class LlmProviderError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
+  readonly retryable: boolean;
+
+  constructor(message: string, options: LlmProviderErrorOptions = {}) {
     super(message, options);
     this.name = "LlmProviderError";
+    this.retryable = options.retryable ?? false;
   }
 }
 

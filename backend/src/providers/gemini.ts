@@ -64,11 +64,15 @@ export class GeminiLlmProvider implements LlmProvider {
 
       const apiError = error as GeminiApiError;
       if (apiError.name === "APIConnectionTimeoutError") {
-        throw new LlmProviderError("The LLM provider timed out", { cause: error });
+        throw new LlmProviderError("The LLM provider timed out", {
+          cause: error,
+          retryable: true
+        });
       }
       if (apiError.status === 429) {
         throw new LlmProviderError("Gemini rate limit exceeded. Try again later.", {
-          cause: error
+          cause: error,
+          retryable: true
         });
       }
       if (apiError.status === 401 || apiError.status === 403) {
@@ -77,7 +81,10 @@ export class GeminiLlmProvider implements LlmProvider {
         });
       }
 
-      throw new LlmProviderError("The LLM provider request failed", { cause: error });
+      throw new LlmProviderError("The LLM provider request failed", {
+        cause: error,
+        retryable: apiError.status === 500 || apiError.status === 502 || apiError.status === 503
+      });
     }
   }
 
@@ -130,11 +137,15 @@ export class GeminiLlmProvider implements LlmProvider {
 
       const apiError = error as GeminiApiError;
       if (apiError.name === "APIConnectionTimeoutError") {
-        throw new LlmProviderError("The LLM provider timed out", { cause: error });
+        throw new LlmProviderError("The LLM provider timed out", {
+          cause: error,
+          retryable: true
+        });
       }
       if (apiError.status === 429) {
         throw new LlmProviderError("Gemini rate limit exceeded. Try again later.", {
-          cause: error
+          cause: error,
+          retryable: true
         });
       }
       if (apiError.status === 401 || apiError.status === 403) {
@@ -143,7 +154,10 @@ export class GeminiLlmProvider implements LlmProvider {
         });
       }
 
-      throw new LlmProviderError("The LLM provider request failed", { cause: error });
+      throw new LlmProviderError("The LLM provider request failed", {
+        cause: error,
+        retryable: apiError.status === 500 || apiError.status === 502 || apiError.status === 503
+      });
     }
   }
 }

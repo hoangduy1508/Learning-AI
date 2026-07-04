@@ -3,6 +3,7 @@ export type StreamEvent =
       type: "start";
       provider: string;
       model: string;
+      conversationId?: string;
     }
   | {
       type: "delta";
