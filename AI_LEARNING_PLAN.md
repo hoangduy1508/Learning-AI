@@ -528,8 +528,8 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: Conversation và Production Basics
 - Current week: Tuần 4
-- Current task: Thêm PostgreSQL repository/driver thật cho conversation persistence, sau đó học sliding window/truncation/summarization/compaction
-- Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
+- Current task: Khởi tạo PostgreSQL runtime thật, chạy migration và smoke test conversation persistence
+- Blockers: Máy hiện tại chưa có Docker CLI trong PATH; gọi `wsl docker --version` báo WSL chưa có distro được cài trong môi trường hiện tại; không có `psql`/`pg_isready`, và không thấy Windows service PostgreSQL local; In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-06-28
 
 ## Progress Log
@@ -755,6 +755,34 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng backend: `npm run typecheck`, `npm test` 35 tests pass, `npm run build`.
 - Chưa hoàn tất PostgreSQL runtime thật vì project chưa có driver/Drizzle/Docker Compose cho database; checklist phần lưu PostgreSQL để `[~]`.
 - Task tiếp theo: thêm PostgreSQL repository implementation bằng `pg` hoặc Drizzle, cấu hình connection env, chạy migration và test conversation persistence với database thật.
+
+### 2026-06-28 - PostgreSQL conversation repository
+
+- Cài `pg` và `@types/pg`; audit npm không phát hiện lỗ hổng.
+- Thêm `PostgresConversationRepository` tại `backend/src/conversations/postgres-repository.ts`.
+- Repository tạo conversation, kiểm tra ownership bằng `WHERE id = $1 AND user_id = $2`, append message và cập nhật `conversations.updated_at`.
+- Thêm `runConversationMigrations()` dùng schema idempotent `CREATE TABLE IF NOT EXISTS` và `CREATE INDEX IF NOT EXISTS`.
+- Nối server với PostgreSQL khi có `DATABASE_URL`; hỗ trợ `DATABASE_SSL` và `DATABASE_RUN_MIGRATIONS`.
+- Cập nhật `.env.example` với cấu hình database mẫu.
+- Thêm tests `backend/tests/conversation-postgres.test.ts` cho migration SQL, parameter binding, ownership query và mapping usage metadata.
+- Cập nhật `backend/docs/CONVERSATION_PERSISTENCE.md` với cách bật persistence thật.
+- Kiểm chứng backend: `npm run typecheck`, `npm test` 40 tests pass, `npm run build`.
+- Chưa chạy integration test với PostgreSQL container thật; hiện kiểm chứng bằng fake queryable để automated suite không phụ thuộc database local.
+- Task tiếp theo: học sliding window/truncation/summarization/compaction và chỉ gửi history cần thiết cho model.
+
+### 2026-06-28 - Chuẩn bị PostgreSQL thật và smoke test
+
+- Thêm `docker-compose.yml` ở root để chạy PostgreSQL 16 local với database `ai_learning`.
+- Thêm script `npm run smoke:conversation-db` tại backend để chạy migration, gửi 2 request `/api/chat`, xác nhận 4 message được persist và wrong-owner bị chặn `404`.
+- Cập nhật `backend/docs/CONVERSATION_PERSISTENCE.md` với lệnh chạy Docker Compose và smoke test.
+- Tạm giữ checklist `Lưu conversation trong PostgreSQL` ở trạng thái `[~]` vì chưa smoke test được với database runtime thật.
+- Kiểm chứng code không cần DB thật: `npm run typecheck`, `npm test` 40 tests pass, `npm run build`.
+- Thử chạy `docker --version` nhưng máy báo không có lệnh `docker`.
+- Thử chạy `wsl docker --version` để dùng Docker trong WSL nhưng Windows báo WSL chưa có distro được cài trong môi trường hiện tại.
+- Kiểm tra `psql`, `pg_isready` và Windows service `postgresql*` nhưng không thấy PostgreSQL local runtime có sẵn.
+- Thử chạy `npm run smoke:conversation-db`; script dừng đúng guard vì chưa có `DATABASE_URL`.
+- Vấn đề còn lại: cần cài Docker Desktop hoặc PostgreSQL local, sau đó chạy `docker compose up -d postgres` hoặc cung cấp `DATABASE_URL` tới PostgreSQL thật.
+- Task tiếp theo: sau khi có Docker/PostgreSQL runtime trong Windows hoặc WSL, chạy `docker compose up -d postgres` từ root repo và `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/ai_learning npm run smoke:conversation-db`, rồi mới đánh dấu `[x]`.
 
 ## Session Notes Template
 

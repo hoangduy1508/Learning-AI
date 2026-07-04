@@ -35,4 +35,16 @@ describe("multi-provider configuration", () => {
       false
     );
   });
+
+  it("parses optional database configuration", () => {
+    const config = loadConfig({
+      DATABASE_URL: "postgres://postgres:postgres@127.0.0.1:5432/ai_learning",
+      DATABASE_SSL: "true",
+      DATABASE_RUN_MIGRATIONS: "false"
+    });
+
+    assert.equal(config.DATABASE_URL, "postgres://postgres:postgres@127.0.0.1:5432/ai_learning");
+    assert.equal(config.DATABASE_SSL, true);
+    assert.equal(config.DATABASE_RUN_MIGRATIONS, false);
+  });
 });

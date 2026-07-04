@@ -9,9 +9,10 @@
     "start": "node dist/server.js",
     "learn:tokens": "tsx src/scripts/token-lab.ts",
     "learn:generation": "tsx src/scripts/generation-lab.ts",
+    "smoke:conversation-db": "tsx src/scripts/conversation-db-smoke.ts",
     "reference:azure-foundry-agent": "tsx src/scripts/azure-foundry-file-agent-reference.ts",
     "typecheck": "tsc -p tsconfig.test.json",
-    "test": "node --import tsx --test tests/app.test.ts tests/config.test.ts tests/streaming.test.ts tests/filesystem.test.ts tests/agent.test.ts tests/structured.test.ts"
+    "test": "node --import tsx --test tests/app.test.ts tests/config.test.ts tests/streaming.test.ts tests/filesystem.test.ts tests/agent.test.ts tests/structured.test.ts tests/conversation-postgres.test.ts"
   },
   "engines": {
     "node": ">=20"
@@ -21,10 +22,12 @@
     "dotenv": "^16.5.0",
     "fastify": "^5.3.0",
     "openai": "^5.0.0",
+    "pg": "^8.22.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   }

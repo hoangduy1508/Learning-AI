@@ -1,3 +1,4 @@
+export const conversationSchemaSql = `
 CREATE TABLE IF NOT EXISTS conversations (
   id uuid PRIMARY KEY,
   user_id text NOT NULL,
@@ -25,3 +26,4 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 
 CREATE INDEX IF NOT EXISTS conversation_messages_conversation_created_idx
   ON conversation_messages (conversation_id, created_at ASC);
+`;

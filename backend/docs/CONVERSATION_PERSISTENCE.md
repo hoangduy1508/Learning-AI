@@ -24,4 +24,50 @@ Schema SQL nam tai `backend/src/conversations/schema.sql`.
 
 ## Hien tai da noi vao app
 
-`buildApp` nhan optional `conversationRepository`. Trong test dang dung `InMemoryConversationRepository` de kiem chung contract ma khong can PostgreSQL runtime. Buoc tiep theo la them driver PostgreSQL/Drizzle va implementation repository that dua tren schema nay.
+`buildApp` nhan optional `conversationRepository`. Trong test route dang dung `InMemoryConversationRepository` de kiem chung contract ma khong can PostgreSQL runtime.
+
+Server production/dev co the bat persistence that bang cac bien moi truong:
+
+```text
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/ai_learning
+DATABASE_SSL=false
+DATABASE_RUN_MIGRATIONS=true
+```
+
+Khi `DATABASE_URL` duoc set, `src/server.ts` tao `pg.Pool` va noi `PostgresConversationRepository` vao `/api/chat`. Khi `DATABASE_RUN_MIGRATIONS=true`, server chay schema idempotent truoc khi listen.
+
+## Kiem chung
+
+- Route tests dung in-memory repository de kiem chung create conversation, append conversation dung owner va chan wrong-owner.
+- `tests/conversation-postgres.test.ts` dung fake database client de kiem chung migration SQL, parameter binding va row mapping cua `PostgresConversationRepository`.
+- `npm run smoke:conversation-db` chay migration vao PostgreSQL that, gui 2 request `/api/chat`, xac nhan co 4 message persisted va wrong-owner bi chan `404`.
+
+## Chay local PostgreSQL
+
+Tu root repository:
+
+```text
+docker compose up -d postgres
+```
+
+Neu chay Docker trong WSL, dung duong dan repo duoi `/mnt/e`:
+
+```text
+cd /mnt/e/Project/AI-learning
+docker compose up -d postgres
+```
+
+Tu `backend/`:
+
+```text
+$env:DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/ai_learning"
+$env:DATABASE_RUN_MIGRATIONS="true"
+npm run smoke:conversation-db
+```
+
+Neu chay smoke test ben trong WSL thay vi PowerShell:
+
+```text
+cd /mnt/e/Project/AI-learning/backend
+DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/ai_learning" DATABASE_RUN_MIGRATIONS="true" npm run smoke:conversation-db
+```
