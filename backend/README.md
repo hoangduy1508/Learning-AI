@@ -130,6 +130,15 @@ npm run smoke:pgvector
 
 See [Embeddings and pgvector](docs/09_EMBEDDINGS_AND_PGVECTOR.md).
 
+## RAG ingestion lab
+
+```powershell
+npm run learn:ingestion
+```
+
+See [RAG Ingestion Pipeline](docs/10_RAG_INGESTION_PIPELINE.md) for parse, clean, chunk,
+embed, and index notes.
+
 ## Filesystem tools
 
 The backend can list, read, search, write, and delete files inside configured allowlisted roots.

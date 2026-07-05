@@ -220,7 +220,7 @@ Definition of Done:
 
 Kiến thức:
 
-- [ ] Hiểu parse, OCR, clean, chunk, embed và index
+- [x] Hiểu parse, OCR, clean, chunk, embed và index
 - [ ] So sánh fixed-size, recursive và structure-aware chunking
 - [ ] Hiểu chunk overlap và parent-child chunking
 - [ ] Hiểu tác động của bảng, header, footer và scanned PDF
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: RAG Ingestion Pipeline
 - Current week: Tuần 6
-- Current task: Bắt đầu Tuần 6, thiết kế RAG ingestion pipeline: parse, clean, chunk, embed và index
+- Current task: So sánh fixed-size, recursive và structure-aware chunking; mở rộng ingestion từ lab sang file upload/PDF parser thật
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -933,6 +933,20 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm test` có 76 test pass; `npm run smoke:pgvector` thành công; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành toàn bộ thực hành Tuần 5.
 - Task tiếp theo: bắt đầu Tuần 6, thiết kế ingestion pipeline: parse, clean, chunk, embed và index.
+
+### 2026-07-05 - RAG ingestion pipeline lab: parse, clean, chunk, embed và index
+
+- Thêm module `backend/src/ingestion/` gồm parser, cleaner, recursive chunker, type contract và `IngestionPipeline`.
+- `parseSourceDocument()` hỗ trợ plain text và PDF text-pages mô phỏng bằng delimiter `---page---`, giữ `pageNumber` để chuẩn bị citation.
+- `cleanText()` chuẩn hóa CRLF, whitespace, dòng trống và trim text trước khi chunking.
+- `chunkCleanedPages()` dùng recursive splitting theo paragraph/newline/câu/space, có `overlapCharacters`, `tokenEstimate`, metadata `page`, `parser` và `chunking`.
+- `IngestionPipeline` parse, clean, chunk, tạo deterministic embedding và index document/chunk qua `VectorRepository`.
+- Thêm `backend/src/scripts/ingestion-lab.ts` và script `npm run learn:ingestion`; lab ingest tài liệu PDF text-pages mô phỏng rồi query top-k, in page của match.
+- Thêm `backend/tests/ingestion.test.ts` kiểm chứng parse giữ page number, clean whitespace, chunk overlap/metadata và pipeline index được chunk có page trace.
+- Thêm tài liệu `backend/docs/10_RAG_INGESTION_PIPELINE.md` và cập nhật `backend/README.md`.
+- Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 80 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `Hiểu parse, OCR, clean, chunk, embed và index` ở mức lab có code/test; PDF parser nhị phân thật, upload validation, checksum và job recovery vẫn là các task thực hành tiếp theo.
+- Task tiếp theo: so sánh fixed-size, recursive và structure-aware chunking; sau đó mở rộng ingestion sang upload và parse PDF thật có page number.
 
 ## Session Notes Template
 
