@@ -174,7 +174,7 @@ Kiến thức:
 - [x] Thiết kế bảng conversation và message
 - [x] Hiểu sliding window, truncation, summarization và compaction
 - [x] Hiểu retry với exponential backoff và jitter
-- [ ] Hiểu rate limiting
+- [x] Hiểu rate limiting
 - [ ] Hiểu model routing, fallback và caching
 
 Thực hành:
@@ -182,7 +182,7 @@ Thực hành:
 - [x] Lưu conversation trong PostgreSQL
 - [x] Chỉ gửi history cần thiết cho model
 - [x] Thêm giới hạn message/context
-- [ ] Thêm rate limit theo user
+- [x] Thêm rate limit theo user
 - [ ] Theo dõi cost theo request và user
 - [ ] Hoàn thiện Project 1
 
@@ -528,9 +528,9 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: Conversation và Production Basics
 - Current week: Tuần 4
-- Current task: Học rate limiting và thêm rate limit theo user cho chat endpoint
+- Current task: Học model routing, fallback và caching
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
-- Last updated: 2026-07-04
+- Last updated: 2026-07-05
 
 ## Progress Log
 
@@ -824,6 +824,19 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm test` có 49 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ thuộc sandbox user khác gây EPERM khi ghi đè.
 - Hoàn thành task `Hiểu retry với exponential backoff và jitter`.
 - Task tiếp theo: học rate limiting và thêm rate limit theo user cho chat endpoint.
+
+### 2026-07-05 - Rate limiting theo user cho chat endpoint
+
+- Thêm `backend/src/rate-limit.ts` với in-memory fixed-window rate limiter theo key, trả quyết định `allowed`, `remaining`, `resetAt` và `retryAfterMs`.
+- Thêm cấu hình `.env`: `CHAT_RATE_LIMIT_MAX_REQUESTS` và `CHAT_RATE_LIMIT_WINDOW_MS`; mặc định 20 request mỗi 60 giây cho mỗi user.
+- Nối limiter vào `/api/chat` sau validation request nhưng trước khi tạo conversation, append message hoặc gọi provider, để request bị chặn không tốn token và không ghi dữ liệu rác.
+- Nối cùng limiter vào `/api/chat/stream` để streaming endpoint không bypass được quota.
+- Khi vượt quota, backend trả `429` với `retry_after_ms`, header `Retry-After`, `RateLimit-Limit`, `RateLimit-Remaining` và `RateLimit-Reset`.
+- Thêm tests cho bucket riêng theo user, reset window, route `429`, stream endpoint bị limit và request bị limit không persist message mới.
+- Cập nhật `backend/docs/08_CONVERSATION_PERSISTENCE.md` với phần rate limiting và ghi chú production nhiều instance nên dùng shared store như Redis.
+- Kiểm chứng: `npm run typecheck` thành công; `npm test` có 56 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `Hiểu rate limiting` và `Thêm rate limit theo user`.
+- Task tiếp theo: học model routing, fallback và caching.
 
 ## Session Notes Template
 

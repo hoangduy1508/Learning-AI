@@ -61,4 +61,14 @@ describe("multi-provider configuration", () => {
     assert.equal(config.LLM_RETRY_MAX_DELAY_MS, 1500);
     assert.equal(config.LLM_RETRY_JITTER_RATIO, 0.35);
   });
+
+  it("parses chat rate limit configuration", () => {
+    const config = loadConfig({
+      CHAT_RATE_LIMIT_MAX_REQUESTS: "5",
+      CHAT_RATE_LIMIT_WINDOW_MS: "30000"
+    });
+
+    assert.equal(config.CHAT_RATE_LIMIT_MAX_REQUESTS, 5);
+    assert.equal(config.CHAT_RATE_LIMIT_WINDOW_MS, 30_000);
+  });
 });

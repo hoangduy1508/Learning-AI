@@ -9,6 +9,7 @@ import { registerFileRoutes } from "./filesystem/routes.js";
 import { defaultRetryPolicy, retryLlmProviderCall, type RetryPolicy } from "./providers/retry.js";
 import type { LlmProvider } from "./providers/types.js";
 import { LlmProviderError } from "./providers/types.js";
+import { InMemoryRateLimiter, type RateLimitDecision, type RateLimitPolicy } from "./rate-limit.js";
 import {
   extractSupportTicket,
   StructuredOutputError,
@@ -24,6 +25,8 @@ const chatRequestSchema = z.object({
 
 interface BuildAppOptions {
   conversationRepository?: ConversationRepository;
+  rateLimiter?: InMemoryRateLimiter;
+  rateLimitPolicy?: RateLimitPolicy;
   retryPolicy?: RetryPolicy;
   retrySleep?: (delayMs: number) => Promise<void>;
 }
@@ -35,6 +38,17 @@ export function buildApp(
 ): FastifyInstance {
   const app = Fastify({ logger: true });
   const conversationRepository = options.conversationRepository;
+  const rateLimiter =
+    options.rateLimiter ??
+    new InMemoryRateLimiter(
+      options.rateLimitPolicy ??
+        (config
+          ? {
+              maxRequests: config.CHAT_RATE_LIMIT_MAX_REQUESTS,
+              windowMs: config.CHAT_RATE_LIMIT_WINDOW_MS
+            }
+          : { maxRequests: 20, windowMs: 60_000 })
+    );
   const retryPolicy = options.retryPolicy ??
     (config
       ? {
@@ -59,6 +73,15 @@ export function buildApp(
       return reply.status(422).send({
         detail: "Invalid request",
         errors: parsedRequest.error.flatten().fieldErrors
+      });
+    }
+
+    const rateLimitDecision = rateLimiter.consume(parsedRequest.data.userId);
+    writeRateLimitHeaders(reply, rateLimitDecision);
+    if (!rateLimitDecision.allowed) {
+      return reply.status(429).send({
+        detail: "Rate limit exceeded",
+        retry_after_ms: rateLimitDecision.retryAfterMs
       });
     }
 
@@ -158,6 +181,15 @@ export function buildApp(
       return reply.status(422).send({
         detail: "Invalid request",
         errors: parsedRequest.error.flatten().fieldErrors
+      });
+    }
+
+    const rateLimitDecision = rateLimiter.consume(parsedRequest.data.userId);
+    writeRateLimitHeaders(reply, rateLimitDecision);
+    if (!rateLimitDecision.allowed) {
+      return reply.status(429).send({
+        detail: "Rate limit exceeded",
+        retry_after_ms: rateLimitDecision.retryAfterMs
       });
     }
 
@@ -298,4 +330,16 @@ export function buildApp(
   });
 
   return app;
+}
+
+function writeRateLimitHeaders(
+  reply: { header: (name: string, value: string | number) => unknown },
+  decision: RateLimitDecision
+) {
+  reply.header("RateLimit-Limit", decision.limit);
+  reply.header("RateLimit-Remaining", decision.remaining);
+  reply.header("RateLimit-Reset", Math.ceil(decision.resetAt / 1000));
+  if (!decision.allowed) {
+    reply.header("Retry-After", Math.ceil(decision.retryAfterMs / 1000));
+  }
 }

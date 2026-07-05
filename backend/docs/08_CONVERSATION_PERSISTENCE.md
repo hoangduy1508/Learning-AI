@@ -48,6 +48,23 @@ LLM_RETRY_MAX_DELAY_MS=2000
 LLM_RETRY_JITTER_RATIO=0.2
 ```
 
+## Rate limiting
+
+`backend/src/rate-limit.ts` them in-memory fixed-window rate limiter cho chat:
+
+- Key hien tai la `userId` da qua request validation.
+- Rate limit chay sau validation nhung truoc khi tao conversation, append message hoac goi provider.
+- `/api/chat` va `/api/chat/stream` dung chung limiter de stream endpoint khong bypass duoc quota.
+- Khi vuot quota, backend tra `429` voi body `Rate limit exceeded`, `retry_after_ms`, header `Retry-After`, `RateLimit-Limit`, `RateLimit-Remaining` va `RateLimit-Reset`.
+- In-memory limiter phu hop cho lab va single process. Production nhieu instance nen chuyen bucket sang Redis/PostgreSQL advisory-backed store de quota dung tren toan cluster.
+
+Cac bien moi truong co the chinh policy:
+
+```text
+CHAT_RATE_LIMIT_MAX_REQUESTS=20
+CHAT_RATE_LIMIT_WINDOW_MS=60000
+```
+
 ## PostgreSQL shape
 
 `conversations` co index `(user_id, updated_at DESC)` de list conversation gan day theo user.
@@ -71,6 +88,7 @@ Khi `DATABASE_URL` duoc set, `src/server.ts` tao `pg.Pool` va noi `PostgresConve
 ## Kiem chung
 
 - Route tests dung in-memory repository de kiem chung create conversation, append conversation dung owner va chan wrong-owner.
+- Rate limit tests kiem chung bucket rieng theo user, reset window, `429` response, stream endpoint bi chan va request bi limit khong persist message moi.
 - `tests/conversation-postgres.test.ts` dung fake database client de kiem chung migration SQL, parameter binding va row mapping cua `PostgresConversationRepository`.
 - `npm run smoke:conversation-db` chay migration vao PostgreSQL that, gui 2 request `/api/chat`, xac nhan co 4 message persisted va wrong-owner bi chan `404`.
 

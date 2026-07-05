@@ -4,6 +4,7 @@ import { afterEach, describe, it } from "node:test";
 import { buildApp } from "../src/app.js";
 import { InMemoryConversationRepository } from "../src/conversations/repository.js";
 import { LlmProviderError, type LlmProvider } from "../src/providers/types.js";
+import { InMemoryRateLimiter } from "../src/rate-limit.js";
 import { parseStreamEvents } from "../src/streaming/events.js";
 
 const stubProvider: LlmProvider = {
@@ -284,6 +285,82 @@ describe("AI Learning API", () => {
     assert.match(response.json().answer, /Recovered answer/);
   });
 
+  it("rate limits chat requests by user", async () => {
+    const app = buildApp(stubProvider, undefined, {
+      rateLimiter: new InMemoryRateLimiter({ maxRequests: 2, windowMs: 60_000 }, () => 1_000)
+    });
+    apps.push(app);
+
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/chat",
+          payload: { userId: "user_1", message: "First" }
+        })
+      ).statusCode,
+      200
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/chat",
+          payload: { userId: "user_1", message: "Second" }
+        })
+      ).statusCode,
+      200
+    );
+
+    const blocked = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: { userId: "user_1", message: "Third" }
+    });
+    assert.equal(blocked.statusCode, 429);
+    assert.deepEqual(blocked.json(), { detail: "Rate limit exceeded", retry_after_ms: 60_000 });
+    assert.equal(blocked.headers["ratelimit-limit"], "2");
+    assert.equal(blocked.headers["ratelimit-remaining"], "0");
+    assert.equal(blocked.headers["retry-after"], "60");
+
+    const otherUser = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: { userId: "user_2", message: "Independent bucket" }
+    });
+    assert.equal(otherUser.statusCode, 200);
+  });
+
+  it("does not persist rate-limited chat requests", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const app = buildApp(stubProvider, undefined, {
+      conversationRepository,
+      rateLimiter: new InMemoryRateLimiter({ maxRequests: 1, windowMs: 60_000 }, () => 1_000)
+    });
+    apps.push(app);
+
+    const firstResponse = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: { userId: "user_1", message: "Allowed" }
+    });
+    assert.equal(firstResponse.statusCode, 200);
+
+    const conversationId = firstResponse.json().conversation_id;
+    const blocked = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: { userId: "user_1", conversationId, message: "Blocked" }
+    });
+
+    assert.equal(blocked.statusCode, 429);
+    const messages = await conversationRepository.listMessages(conversationId);
+    assert.deepEqual(
+      messages.map((message) => message.content),
+      ["Allowed", "Answer to: Allowed"]
+    );
+  });
+
   it("streams chat events", async () => {
     const response = await createApp(stubProvider).inject({
       method: "POST",
@@ -346,5 +423,28 @@ describe("AI Learning API", () => {
     assert.deepEqual(parseStreamEvents(response.body), [
       { type: "error", message: "Provider unavailable" }
     ]);
+  });
+
+  it("rate limits streaming chat requests by user before opening an event stream", async () => {
+    const app = buildApp(stubProvider, undefined, {
+      rateLimiter: new InMemoryRateLimiter({ maxRequests: 1, windowMs: 60_000 }, () => 1_000)
+    });
+    apps.push(app);
+
+    const allowed = await app.inject({
+      method: "POST",
+      url: "/api/chat/stream",
+      payload: { userId: "user_1", message: "First stream" }
+    });
+    assert.equal(allowed.statusCode, 200);
+
+    const blocked = await app.inject({
+      method: "POST",
+      url: "/api/chat/stream",
+      payload: { userId: "user_1", message: "Second stream" }
+    });
+    assert.equal(blocked.statusCode, 429);
+    assert.match(blocked.headers["content-type"] as string, /application\/json/);
+    assert.deepEqual(blocked.json(), { detail: "Rate limit exceeded", retry_after_ms: 60_000 });
   });
 });

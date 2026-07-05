@@ -20,6 +20,8 @@ const environmentSchema = z
     LLM_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(0).default(250),
     LLM_RETRY_MAX_DELAY_MS: z.coerce.number().int().min(0).default(2_000),
     LLM_RETRY_JITTER_RATIO: z.coerce.number().min(0).max(1).default(0.2),
+    CHAT_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(20),
+    CHAT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
     FILE_TOOL_ALLOWED_ROOTS: z.string().default(""),
     FILE_TOOL_ALLOW_WRITE: booleanEnvironmentValue.default(false),
     FILE_TOOL_ALLOW_DELETE: booleanEnvironmentValue.default(false),
