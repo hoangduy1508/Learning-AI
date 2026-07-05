@@ -196,18 +196,18 @@ Definition of Done:
 
 Kiến thức:
 
-- [ ] Hiểu embedding và vector dimension
-- [ ] Hiểu cosine similarity, cosine distance, dot product và L2
-- [ ] Hiểu exact và approximate nearest-neighbor search
-- [ ] Hiểu HNSW và IVFFlat ở mức sử dụng
-- [ ] Hiểu metadata filtering
+- [x] Hiểu embedding và vector dimension
+- [x] Hiểu cosine similarity, cosine distance, dot product và L2
+- [x] Hiểu exact và approximate nearest-neighbor search
+- [x] Hiểu HNSW và IVFFlat ở mức sử dụng
+- [x] Hiểu metadata filtering
 
 Thực hành:
 
-- [ ] Chạy PostgreSQL + pgvector bằng Docker
-- [ ] Tạo bảng document và document chunk
-- [ ] Lưu embedding kèm metadata
-- [ ] Truy vấn top-k bằng cosine distance
+- [~] Chạy PostgreSQL + pgvector bằng Docker
+- [x] Tạo bảng document và document chunk
+- [x] Lưu embedding kèm metadata
+- [x] Truy vấn top-k bằng cosine distance
 - [ ] So sánh kết quả với các query khác nhau
 - [ ] Thử HNSW index và xem query plan
 
@@ -528,8 +528,8 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: Embedding và Vector Search
 - Current week: Tuần 5
-- Current task: Chạy PostgreSQL + pgvector bằng Docker và học embedding/vector dimension
-- Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
+- Current task: So sánh kết quả với các query khác nhau, sau đó chạy smoke pgvector/HNSW query plan khi có Docker hoặc PostgreSQL runtime thật
+- Blockers: Docker không có trong Windows PATH và WSL hiện báo không có distro; In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
 ## Progress Log
@@ -880,6 +880,34 @@ Observability / Evaluation / Cost Tracking
 - Thử start dev server trong nền bằng `Start-Process` nhưng process không giữ lại trong phiên shell hiện tại; chạy trực tiếp `npm run dev` hoạt động, nên demo local cần mở 2 terminal thủ công nếu muốn xem UI.
 - Hoàn thành task `Hoàn thiện Project 1`.
 - Task tiếp theo: bắt đầu Tuần 5, chạy PostgreSQL + pgvector bằng Docker và học embedding/vector dimension.
+
+### 2026-07-05 - Bắt đầu Tuần 5: embedding dimension và pgvector schema
+
+- Đổi `docker-compose.yml` từ `postgres:16-alpine` sang `pgvector/pgvector:pg16` để PostgreSQL có sẵn extension pgvector.
+- Thêm `backend/src/embeddings/deterministic.ts` để tạo embedding deterministic 4 chiều phục vụ lab không cần gọi provider thật.
+- Thêm hàm tính cosine similarity, cosine distance, dot product và L2 distance; test xác nhận mismatch dimension bị reject.
+- Thêm `backend/src/vector/schema.ts` với `CREATE EXTENSION IF NOT EXISTS vector`, bảng `rag_documents`, bảng `rag_document_chunks`, metadata JSON, tenant/user ownership và cột `embedding vector(4)`.
+- Schema có index `(tenant_id, owner_user_id)` để nhấn mạnh authorization/metadata filter trước retrieval và HNSW index `embedding vector_cosine_ops` để chuẩn bị approximate search.
+- Thêm `npm run smoke:pgvector` qua `backend/src/scripts/pgvector-smoke.ts`: tạo extension/schema, insert chunk + embedding, query top-k bằng cosine distance `<=>` và kiểm chứng pgvector reject vector sai dimension.
+- Thêm tài liệu `backend/docs/09_EMBEDDINGS_AND_PGVECTOR.md` giải thích embedding dimension, cosine/dot/L2, schema, lệnh Docker và smoke test.
+- Cập nhật README root/backend với hướng dẫn pgvector lab.
+- Kiểm chứng không cần DB thật: `npm run typecheck` thành công; `npm test` có 71 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Thử `docker --version`: Windows không có lệnh `docker`; thử `wsl docker --version` và `wsl -l -v`: WSL báo không có distro được cài trong phiên hiện tại.
+- Thử `npm run smoke:pgvector`: script dừng đúng guard vì chưa có `DATABASE_URL`; chưa thể đánh dấu `Chạy PostgreSQL + pgvector bằng Docker` là hoàn tất thật.
+- Hoàn thành kiến thức `Hiểu embedding và vector dimension` và `Hiểu cosine similarity, cosine distance, dot product và L2`.
+- Task tiếp theo: bật Docker/WSL hoặc PostgreSQL pgvector runtime thật, chạy `docker compose up -d postgres`, đặt `DATABASE_URL`, rồi chạy `npm run smoke:pgvector`.
+
+### 2026-07-05 - Vector repository, metadata filter và top-k retrieval
+
+- Xác nhận lại runtime hiện tại: Windows không có lệnh `docker`; `wsl docker --version` báo WSL chưa có distro được cài trong phiên này, nên chưa thể chạy smoke pgvector thật.
+- Thêm `backend/src/vector/repository.ts` với `VectorRepository`, `InMemoryVectorRepository` và `PostgresVectorRepository`.
+- Repository lưu document metadata, chunk content, metadata JSON và embedding; `searchTopK()` bắt buộc nhận `tenantId`, `ownerUserId`, query embedding và `topK`.
+- Query PostgreSQL dùng `embedding <=> $1::vector`, filter `tenant_id`, `owner_user_id` và metadata trước khi sort/trả context.
+- Thêm `backend/tests/vector-repository.test.ts` kiểm chứng lưu embedding kèm metadata, ranking top-k theo cosine distance, tenant/user isolation và metadata filter trong SQL.
+- Cập nhật `backend/docs/09_EMBEDDINGS_AND_PGVECTOR.md` bằng tiếng Việt có dấu, thêm phần exact vs approximate nearest-neighbor, HNSW, IVFFlat và metadata filtering.
+- Kiểm chứng: `npm run typecheck` thành công; `npm test` có 74 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `Hiểu exact và approximate nearest-neighbor search`, `Hiểu HNSW và IVFFlat ở mức sử dụng`, `Hiểu metadata filtering`, `Lưu embedding kèm metadata` và `Truy vấn top-k bằng cosine distance`.
+- Task tiếp theo: so sánh kết quả retrieval với các query khác nhau; khi có Docker/PostgreSQL runtime thật thì chạy `npm run smoke:pgvector` và `EXPLAIN` để xem HNSW query plan.
 
 ## Session Notes Template
 

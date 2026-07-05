@@ -119,6 +119,17 @@ Invoke-RestMethod `
 See [Conversation Persistence](docs/08_CONVERSATION_PERSISTENCE.md) for schema, context window,
 retry, rate limiting, provider routing, cache, and cost tracking notes.
 
+## pgvector lab
+
+`docker-compose.yml` uses `pgvector/pgvector:pg16` for Week 5. After PostgreSQL is running:
+
+```powershell
+$env:DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/ai_learning"
+npm run smoke:pgvector
+```
+
+See [Embeddings and pgvector](docs/09_EMBEDDINGS_AND_PGVECTOR.md).
+
 ## Filesystem tools
 
 The backend can list, read, search, write, and delete files inside configured allowlisted roots.

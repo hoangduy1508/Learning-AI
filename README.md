@@ -19,6 +19,15 @@ Implemented capabilities:
 - Token, latency, and estimated cost tracking.
 - Structured output and tool-calling labs.
 
+## Week 5: pgvector Lab
+
+The next lab starts the RAG storage layer with PostgreSQL + pgvector:
+
+- Docker Compose uses `pgvector/pgvector:pg16`.
+- `backend/src/vector/schema.ts` defines document and chunk tables.
+- `npm run smoke:pgvector` creates the extension, inserts sample vectors, runs top-k cosine
+  search, and checks vector dimension enforcement.
+
 ## Verify
 
 Run backend checks:
