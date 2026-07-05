@@ -7,7 +7,8 @@ import type {
   ConversationMessageRecord,
   ConversationRecord,
   ConversationRepository,
-  CreateConversationMessageInput
+  CreateConversationMessageInput,
+  UserCostSummary
 } from "./repository.js";
 import { conversationSchemaSql } from "./schema.js";
 
@@ -37,7 +38,17 @@ interface ConversationMessageRow {
   output_tokens: number | null;
   thinking_tokens: number | null;
   total_tokens: number | null;
+  estimated_cost_usd_micros: string | number | null;
   created_at: Date | string;
+}
+
+interface UserCostSummaryRow {
+  request_count: string | number;
+  input_tokens: string | number | null;
+  output_tokens: string | number | null;
+  thinking_tokens: string | number | null;
+  total_tokens: string | number | null;
+  estimated_cost_usd_micros: string | number | null;
 }
 
 export async function runConversationMigrations(database: Queryable): Promise<void> {
@@ -87,9 +98,10 @@ export class PostgresConversationRepository implements ConversationRepository {
             input_tokens,
             output_tokens,
             thinking_tokens,
-            total_tokens
+            total_tokens,
+            estimated_cost_usd_micros
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
           RETURNING
             id,
             conversation_id,
@@ -101,6 +113,7 @@ export class PostgresConversationRepository implements ConversationRepository {
             output_tokens,
             thinking_tokens,
             total_tokens,
+            estimated_cost_usd_micros,
             created_at
         )
         UPDATE conversations
@@ -118,6 +131,7 @@ export class PostgresConversationRepository implements ConversationRepository {
           inserted_message.output_tokens,
           inserted_message.thinking_tokens,
           inserted_message.total_tokens,
+          inserted_message.estimated_cost_usd_micros,
           inserted_message.created_at
       `,
       [
@@ -130,7 +144,8 @@ export class PostgresConversationRepository implements ConversationRepository {
         input.usage?.inputTokens ?? null,
         input.usage?.outputTokens ?? null,
         input.usage?.thinkingTokens ?? null,
-        input.usage?.totalTokens ?? null
+        input.usage?.totalTokens ?? null,
+        input.estimatedCostUsdMicros ?? null
       ]
     );
 
@@ -151,6 +166,7 @@ export class PostgresConversationRepository implements ConversationRepository {
           output_tokens,
           thinking_tokens,
           total_tokens,
+          estimated_cost_usd_micros,
           created_at
         FROM conversation_messages
         WHERE conversation_id = $1
@@ -160,6 +176,36 @@ export class PostgresConversationRepository implements ConversationRepository {
     );
 
     return result.rows.map(mapMessageRow);
+  }
+
+  async getUserCostSummary(userId: string): Promise<UserCostSummary> {
+    const result = await this.database.query<UserCostSummaryRow>(
+      `
+        SELECT
+          COUNT(*) FILTER (WHERE message.role = 'assistant' AND message.total_tokens IS NOT NULL)
+            AS request_count,
+          COALESCE(SUM(message.input_tokens), 0) AS input_tokens,
+          COALESCE(SUM(message.output_tokens), 0) AS output_tokens,
+          COALESCE(SUM(message.thinking_tokens), 0) AS thinking_tokens,
+          COALESCE(SUM(message.total_tokens), 0) AS total_tokens,
+          COALESCE(SUM(message.estimated_cost_usd_micros), 0) AS estimated_cost_usd_micros
+        FROM conversations conversation
+        JOIN conversation_messages message ON message.conversation_id = conversation.id
+        WHERE conversation.user_id = $1 AND message.role = 'assistant'
+      `,
+      [userId]
+    );
+
+    const row = requireSingleRow(result);
+    return {
+      userId,
+      requestCount: toNumber(row.request_count),
+      inputTokens: toNumber(row.input_tokens),
+      outputTokens: toNumber(row.output_tokens),
+      thinkingTokens: toNumber(row.thinking_tokens),
+      totalTokens: toNumber(row.total_tokens),
+      estimatedCostUsdMicros: toNumber(row.estimated_cost_usd_micros)
+    };
   }
 }
 
@@ -190,6 +236,8 @@ function mapMessageRow(row: ConversationMessageRow): ConversationMessageRecord {
     provider: row.provider,
     model: row.model,
     usage: mapUsage(row),
+    estimatedCostUsdMicros:
+      row.estimated_cost_usd_micros == null ? null : toNumber(row.estimated_cost_usd_micros),
     createdAt: toDate(row.created_at)
   };
 }
@@ -214,4 +262,11 @@ function mapUsage(row: ConversationMessageRow): LlmUsage | null {
 
 function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
+}
+
+function toNumber(value: string | number | null): number {
+  if (value === null) {
+    return 0;
+  }
+  return typeof value === "number" ? value : Number(value);
 }

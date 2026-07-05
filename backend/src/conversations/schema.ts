@@ -21,8 +21,12 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   output_tokens integer,
   thinking_tokens integer,
   total_tokens integer,
+  estimated_cost_usd_micros bigint,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE conversation_messages
+  ADD COLUMN IF NOT EXISTS estimated_cost_usd_micros bigint;
 
 CREATE INDEX IF NOT EXISTS conversation_messages_conversation_created_idx
   ON conversation_messages (conversation_id, created_at ASC);

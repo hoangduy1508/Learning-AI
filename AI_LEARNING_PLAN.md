@@ -183,7 +183,7 @@ Thực hành:
 - [x] Chỉ gửi history cần thiết cho model
 - [x] Thêm giới hạn message/context
 - [x] Thêm rate limit theo user
-- [ ] Theo dõi cost theo request và user
+- [x] Theo dõi cost theo request và user
 - [ ] Hoàn thiện Project 1
 
 Definition of Done:
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: Conversation và Production Basics
 - Current week: Tuần 4
-- Current task: Theo dõi cost theo request và user
+- Current task: Hoàn thiện Project 1
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -851,6 +851,21 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm test` có 62 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `Hiểu model routing, fallback và caching`.
 - Task tiếp theo: theo dõi cost theo request và user.
+
+### 2026-07-05 - Cost tracking theo request và user
+
+- Thêm `backend/src/cost.ts` để ước tính provider cost từ token usage và pricing cấu hình trong env, lưu bằng micro-USD integer để cộng dồn ổn định.
+- Thêm cấu hình `.env`: `OPENAI_INPUT_USD_PER_1M_TOKENS`, `OPENAI_OUTPUT_USD_PER_1M_TOKENS`, `OPENAI_THINKING_USD_PER_1M_TOKENS`, `GEMINI_INPUT_USD_PER_1M_TOKENS`, `GEMINI_OUTPUT_USD_PER_1M_TOKENS` và `GEMINI_THINKING_USD_PER_1M_TOKENS`.
+- Không hard-code giá provider vì pricing thay đổi theo thời gian; mặc định là 0 và người chạy điền giá hiện tại từ billing docs của provider.
+- `POST /api/chat` trả thêm `estimated_cost_usd` và `cache_hit`; cache hit vẫn trả usage để quan sát nhưng estimated cost của request hiện tại bằng 0.
+- Assistant message lưu thêm `estimated_cost_usd_micros`; schema có `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` để migration idempotent với database cũ.
+- Thêm `GET /api/users/:userId/cost-summary` để tổng hợp request count, input/output/thinking/total tokens và estimated cost theo user từ persisted conversations.
+- Streaming chat cũng persist estimated cost khi có repository và usage event.
+- Cập nhật `backend/docs/08_CONVERSATION_PERSISTENCE.md` với phần cost tracking, cost summary endpoint và lưu ý cache hit không tính chi phí provider mới.
+- Thêm tests cho cost formula, parse config pricing, route response cost, cache hit cost bằng 0, Postgres cost column và summary query.
+- Kiểm chứng: `npm run typecheck` thành công; `npm test` có 67 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `Theo dõi cost theo request và user`.
+- Task tiếp theo: hoàn thiện Project 1.
 
 ## Session Notes Template
 

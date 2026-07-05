@@ -5,7 +5,7 @@
 Conversation persistence tach thanh hai bang:
 
 - `conversations`: metadata cua thread chat va owner.
-- `conversation_messages`: tung message theo thu tu thoi gian, kem provider/model/usage cho assistant output.
+- `conversation_messages`: tung message theo thu tu thoi gian, kem provider/model/usage/cost cho assistant output.
 
 Schema SQL nam tai `backend/src/conversations/schema.sql`.
 
@@ -15,6 +15,7 @@ Schema SQL nam tai `backend/src/conversations/schema.sql`.
 - Model khong duoc quyet dinh `userId`, `conversationId` hay ownership. Day la application state.
 - Message cua user duoc luu sau khi request hop le. Message cua assistant chi duoc luu khi provider tra loi thanh cong.
 - Usage duoc luu tren assistant message de tinh cost theo request/user ve sau.
+- Estimated cost duoc luu bang micro-USD integer de cong don on dinh hon so thap phan.
 - History cu la untrusted conversation content. Khi render history vao prompt, backend tach history khoi current user message va noi ro no khong phai system instruction.
 
 ## Context window policy
@@ -86,11 +87,31 @@ LLM_FALLBACK_PROVIDER=fake
 CHAT_CACHE_TTL_MS=30000
 ```
 
+## Cost tracking
+
+`backend/src/cost.ts` tinh estimated provider cost tu token usage va pricing trong env:
+
+- Don vi luu tru la `estimated_cost_usd_micros`, tuc 1 USD = 1,000,000 micros.
+- `POST /api/chat` tra them `estimated_cost_usd` va `cache_hit`.
+- Neu response den tu cache, usage van duoc tra ve de quan sat, nhung estimated cost cua request hien tai bang 0 vi khong goi provider moi.
+- Assistant message luu provider, model, usage va estimated cost de aggregate sau nay.
+- `GET /api/users/:userId/cost-summary` tong hop request count, token usage va estimated cost cua user do tu persisted conversations.
+- Gia provider thay doi theo thoi gian, nen code khong hard-code pricing. Dien gia hien tai tu billing docs cua provider vao `.env`.
+
+```text
+OPENAI_INPUT_USD_PER_1M_TOKENS=0
+OPENAI_OUTPUT_USD_PER_1M_TOKENS=0
+OPENAI_THINKING_USD_PER_1M_TOKENS=0
+GEMINI_INPUT_USD_PER_1M_TOKENS=0
+GEMINI_OUTPUT_USD_PER_1M_TOKENS=0
+GEMINI_THINKING_USD_PER_1M_TOKENS=0
+```
+
 ## PostgreSQL shape
 
 `conversations` co index `(user_id, updated_at DESC)` de list conversation gan day theo user.
 
-`conversation_messages` co index `(conversation_id, created_at ASC)` de lay history dung thu tu. Token usage duoc tach cot thay vi nhet JSON de de aggregate cost/usage.
+`conversation_messages` co index `(conversation_id, created_at ASC)` de lay history dung thu tu. Token usage va estimated cost duoc tach cot thay vi nhet JSON de de aggregate cost/usage.
 
 ## Hien tai da noi vao app
 
@@ -111,6 +132,7 @@ Khi `DATABASE_URL` duoc set, `src/server.ts` tao `pg.Pool` va noi `PostgresConve
 - Route tests dung in-memory repository de kiem chung create conversation, append conversation dung owner va chan wrong-owner.
 - Rate limit tests kiem chung bucket rieng theo user, reset window, `429` response, stream endpoint bi chan va request bi limit khong persist message moi.
 - Provider routing tests kiem chung cache TTL, fallback khi primary fail retryable, khong fallback cho loi non-retryable va cache fallback result.
+- Cost tests kiem chung formula micro-USD, response cost theo request, cache hit cost bang 0 va summary theo user.
 - `tests/conversation-postgres.test.ts` dung fake database client de kiem chung migration SQL, parameter binding va row mapping cua `PostgresConversationRepository`.
 - `npm run smoke:conversation-db` chay migration vao PostgreSQL that, gui 2 request `/api/chat`, xac nhan co 4 message persisted va wrong-owner bi chan `404`.
 

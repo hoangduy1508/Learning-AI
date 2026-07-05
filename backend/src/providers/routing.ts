@@ -56,7 +56,7 @@ export class RoutingLlmProvider implements LlmProvider {
     const cacheKey = buildCacheKey(message);
     const cached = this.options.cache?.get(cacheKey);
     if (cached) {
-      return cached;
+      return { ...cached, cacheHit: true };
     }
 
     try {
@@ -92,6 +92,7 @@ function cloneResult(result: LlmResult): LlmResult {
     text: result.text,
     provider: result.provider,
     model: result.model,
-    usage: { ...result.usage }
+    usage: { ...result.usage },
+    cacheHit: result.cacheHit
   };
 }

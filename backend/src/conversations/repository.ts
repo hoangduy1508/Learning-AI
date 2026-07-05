@@ -20,6 +20,7 @@ export interface ConversationMessageRecord {
   model: string | null;
   provider: string | null;
   usage: LlmUsage | null;
+  estimatedCostUsdMicros: number | null;
   createdAt: Date;
 }
 
@@ -30,6 +31,17 @@ export interface CreateConversationMessageInput {
   model?: string;
   provider?: string;
   usage?: LlmUsage;
+  estimatedCostUsdMicros?: number;
+}
+
+export interface UserCostSummary {
+  userId: string;
+  requestCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  thinkingTokens: number;
+  totalTokens: number;
+  estimatedCostUsdMicros: number;
 }
 
 export interface ConversationRepository {
@@ -37,6 +49,7 @@ export interface ConversationRepository {
   findConversationForUser(id: string, userId: string): Promise<ConversationRecord | null>;
   addMessage(input: CreateConversationMessageInput): Promise<ConversationMessageRecord>;
   listMessages(conversationId: string): Promise<ConversationMessageRecord[]>;
+  getUserCostSummary(userId: string): Promise<UserCostSummary>;
 }
 
 export class InMemoryConversationRepository implements ConversationRepository {
@@ -79,6 +92,7 @@ export class InMemoryConversationRepository implements ConversationRepository {
       model: input.model ?? null,
       provider: input.provider ?? null,
       usage: input.usage ?? null,
+      estimatedCostUsdMicros: input.estimatedCostUsdMicros ?? null,
       createdAt: new Date()
     };
 
@@ -89,5 +103,36 @@ export class InMemoryConversationRepository implements ConversationRepository {
 
   async listMessages(conversationId: string): Promise<ConversationMessageRecord[]> {
     return [...(this.messages.get(conversationId) ?? [])];
+  }
+
+  async getUserCostSummary(userId: string): Promise<UserCostSummary> {
+    const userConversationIds = [...this.conversations.values()]
+      .filter((conversation) => conversation.userId === userId)
+      .map((conversation) => conversation.id);
+    const assistantMessages = userConversationIds.flatMap((conversationId) =>
+      (this.messages.get(conversationId) ?? []).filter((message) => message.role === "assistant")
+    );
+
+    return assistantMessages.reduce<UserCostSummary>(
+      (summary, message) => ({
+        userId,
+        requestCount: summary.requestCount + (message.usage ? 1 : 0),
+        inputTokens: summary.inputTokens + (message.usage?.inputTokens ?? 0),
+        outputTokens: summary.outputTokens + (message.usage?.outputTokens ?? 0),
+        thinkingTokens: summary.thinkingTokens + (message.usage?.thinkingTokens ?? 0),
+        totalTokens: summary.totalTokens + (message.usage?.totalTokens ?? 0),
+        estimatedCostUsdMicros:
+          summary.estimatedCostUsdMicros + (message.estimatedCostUsdMicros ?? 0)
+      }),
+      {
+        userId,
+        requestCount: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        thinkingTokens: 0,
+        totalTokens: 0,
+        estimatedCostUsdMicros: 0
+      }
+    );
   }
 }

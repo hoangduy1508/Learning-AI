@@ -10,6 +10,7 @@ export interface LlmResult {
   provider: "fake" | "openai" | "gemini";
   model: string;
   usage: LlmUsage;
+  cacheHit?: boolean;
 }
 
 export interface LlmProvider {

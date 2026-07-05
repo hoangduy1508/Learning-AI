@@ -88,4 +88,18 @@ describe("multi-provider configuration", () => {
         RoutingLlmProvider
     );
   });
+
+  it("parses provider cost configuration", () => {
+    const config = loadConfig({
+      OPENAI_INPUT_USD_PER_1M_TOKENS: "0.15",
+      OPENAI_OUTPUT_USD_PER_1M_TOKENS: "0.6",
+      GEMINI_INPUT_USD_PER_1M_TOKENS: "0.1",
+      GEMINI_OUTPUT_USD_PER_1M_TOKENS: "0.4"
+    });
+
+    assert.equal(config.OPENAI_INPUT_USD_PER_1M_TOKENS, 0.15);
+    assert.equal(config.OPENAI_OUTPUT_USD_PER_1M_TOKENS, 0.6);
+    assert.equal(config.GEMINI_INPUT_USD_PER_1M_TOKENS, 0.1);
+    assert.equal(config.GEMINI_OUTPUT_USD_PER_1M_TOKENS, 0.4);
+  });
 });

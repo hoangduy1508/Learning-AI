@@ -97,6 +97,7 @@ describe("PostgresConversationRepository", () => {
           output_tokens: 5,
           thinking_tokens: null,
           total_tokens: 8,
+          estimated_cost_usd_micros: 123,
           created_at: createdAt
         }
       ]
@@ -109,11 +110,13 @@ describe("PostgresConversationRepository", () => {
       content: "Hello",
       provider: "fake",
       model: "stub-model",
-      usage: { inputTokens: 3, outputTokens: 5, totalTokens: 8 }
+      usage: { inputTokens: 3, outputTokens: 5, totalTokens: 8 },
+      estimatedCostUsdMicros: 123
     });
 
     assert.equal(message.conversationId, "f1447b2b-15c1-465d-ae21-bcd06af72867");
     assert.deepEqual(message.usage, { inputTokens: 3, outputTokens: 5, totalTokens: 8 });
+    assert.equal(message.estimatedCostUsdMicros, 123);
     assert.deepEqual(database.calls[0]?.values?.slice(1), [
       "f1447b2b-15c1-465d-ae21-bcd06af72867",
       "assistant",
@@ -123,7 +126,38 @@ describe("PostgresConversationRepository", () => {
       3,
       5,
       null,
-      8
+      8,
+      123
     ]);
+  });
+
+  it("summarizes token usage and estimated cost by user", async () => {
+    const database = new FakeDatabase([
+      [
+        {
+          request_count: "2",
+          input_tokens: "100",
+          output_tokens: "40",
+          thinking_tokens: "10",
+          total_tokens: "150",
+          estimated_cost_usd_micros: "250"
+        }
+      ]
+    ]);
+    const repository = new PostgresConversationRepository(database);
+
+    const summary = await repository.getUserCostSummary("user_1");
+
+    assert.deepEqual(summary, {
+      userId: "user_1",
+      requestCount: 2,
+      inputTokens: 100,
+      outputTokens: 40,
+      thinkingTokens: 10,
+      totalTokens: 150,
+      estimatedCostUsdMicros: 250
+    });
+    assert.deepEqual(database.calls[0]?.values, ["user_1"]);
+    assert.match(database.calls[0]?.text, /SUM\(message\.estimated_cost_usd_micros\)/);
   });
 });

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import { buildApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
 import { InMemoryConversationRepository } from "../src/conversations/repository.js";
 import { LlmProviderError, type LlmProvider } from "../src/providers/types.js";
 import { InMemoryRateLimiter } from "../src/rate-limit.js";
@@ -35,6 +36,47 @@ const failingProvider: LlmProvider = {
 
   async *stream() {
     throw new LlmProviderError("Provider unavailable");
+  }
+};
+
+const meteredProvider: LlmProvider = {
+  async generate() {
+    return {
+      text: "Metered answer",
+      provider: "openai",
+      model: "metered-model",
+      usage: { inputTokens: 1_000, outputTokens: 500, thinkingTokens: 100, totalTokens: 1_600 }
+    };
+  },
+
+  async *stream() {
+    yield { type: "metadata" as const, provider: "openai" as const, model: "metered-model" };
+    yield { type: "delta" as const, text: "Metered stream" };
+    yield {
+      type: "usage" as const,
+      usage: { inputTokens: 1_000, outputTokens: 500, thinkingTokens: 100, totalTokens: 1_600 }
+    };
+  }
+};
+
+const cachedMeteredProvider: LlmProvider = {
+  async generate() {
+    return {
+      text: "Cached answer",
+      provider: "openai",
+      model: "metered-model",
+      usage: { inputTokens: 1_000, outputTokens: 500, totalTokens: 1_500 },
+      cacheHit: true
+    };
+  },
+
+  async *stream() {
+    yield { type: "metadata" as const, provider: "openai" as const, model: "metered-model" };
+    yield { type: "delta" as const, text: "Cached stream" };
+    yield {
+      type: "usage" as const,
+      usage: { inputTokens: 1_000, outputTokens: 500, totalTokens: 1_500 }
+    };
   }
 };
 
@@ -359,6 +401,71 @@ describe("AI Learning API", () => {
       messages.map((message) => message.content),
       ["Allowed", "Answer to: Allowed"]
     );
+  });
+
+  it("tracks estimated request cost and summarizes it by user", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const app = buildApp(
+      meteredProvider,
+      loadConfig({
+        LLM_PROVIDER: "fake",
+        OPENAI_INPUT_USD_PER_1M_TOKENS: "1",
+        OPENAI_OUTPUT_USD_PER_1M_TOKENS: "2",
+        OPENAI_THINKING_USD_PER_1M_TOKENS: "0.5"
+      }),
+      { conversationRepository }
+    );
+    apps.push(app);
+
+    const chatResponse = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: { userId: "user_1", message: "Track cost" }
+    });
+
+    assert.equal(chatResponse.statusCode, 200);
+    assert.equal(chatResponse.json().estimated_cost_usd, 0.00205);
+    assert.equal(chatResponse.json().cache_hit, false);
+
+    const summaryResponse = await app.inject({
+      method: "GET",
+      url: "/api/users/user_1/cost-summary"
+    });
+
+    assert.equal(summaryResponse.statusCode, 200);
+    assert.deepEqual(summaryResponse.json(), {
+      user_id: "user_1",
+      request_count: 1,
+      input_tokens: 1_000,
+      output_tokens: 500,
+      thinking_tokens: 100,
+      total_tokens: 1_600,
+      estimated_cost_usd: 0.00205,
+      estimated_cost_usd_micros: 2_050
+    });
+  });
+
+  it("does not estimate new provider cost for cached chat responses", async () => {
+    const app = buildApp(
+      cachedMeteredProvider,
+      loadConfig({
+        LLM_PROVIDER: "fake",
+        OPENAI_INPUT_USD_PER_1M_TOKENS: "1",
+        OPENAI_OUTPUT_USD_PER_1M_TOKENS: "2"
+      })
+    );
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: { userId: "user_1", message: "Cached prompt" }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().cache_hit, true);
+    assert.equal(response.json().usage.total_tokens, 1_500);
+    assert.equal(response.json().estimated_cost_usd, 0);
   });
 
   it("streams chat events", async () => {

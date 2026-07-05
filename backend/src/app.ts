@@ -3,6 +3,11 @@ import { z } from "zod";
 
 import { registerAgentRoutes } from "./agent/routes.js";
 import { buildConversationPrompt } from "./conversations/context.js";
+import {
+  estimateCostUsdMicros,
+  usdMicrosToUsd,
+  type ProviderPricingCatalog
+} from "./cost.js";
 import type { AppConfig } from "./config.js";
 import type { ConversationRepository } from "./conversations/repository.js";
 import { registerFileRoutes } from "./filesystem/routes.js";
@@ -23,6 +28,10 @@ const chatRequestSchema = z.object({
   userId: z.string().min(1).max(128).default("demo-user")
 });
 
+const userParamsSchema = z.object({
+  userId: z.string().min(1).max(128)
+});
+
 interface BuildAppOptions {
   conversationRepository?: ConversationRepository;
   rateLimiter?: InMemoryRateLimiter;
@@ -38,6 +47,7 @@ export function buildApp(
 ): FastifyInstance {
   const app = Fastify({ logger: true });
   const conversationRepository = options.conversationRepository;
+  const pricingCatalog = config ? buildPricingCatalog(config) : buildZeroPricingCatalog();
   const rateLimiter =
     options.rateLimiter ??
     new InMemoryRateLimiter(
@@ -125,6 +135,9 @@ export function buildApp(
         }
       });
       const latencyMs = Math.round(performance.now() - startedAt);
+      const estimatedCostUsdMicros = result.cacheHit
+        ? 0
+        : estimateCostUsdMicros(result.usage, pricingCatalog[result.provider]);
 
       let assistantMessageId: string | undefined;
       if (conversationRepository && conversation) {
@@ -134,7 +147,8 @@ export function buildApp(
           content: result.text,
           model: result.model,
           provider: result.provider,
-          usage: result.usage
+          usage: result.usage,
+          estimatedCostUsdMicros
         });
         assistantMessageId = assistantMessage.id;
       }
@@ -147,7 +161,9 @@ export function buildApp(
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
           thinkingTokens: result.usage.thinkingTokens ?? 0,
-          totalTokens: result.usage.totalTokens
+          totalTokens: result.usage.totalTokens,
+          estimatedCostUsdMicros,
+          cacheHit: result.cacheHit ?? false
         },
         "LLM request completed"
       );
@@ -162,6 +178,8 @@ export function buildApp(
           thinking_tokens: result.usage.thinkingTokens ?? 0,
           total_tokens: result.usage.totalTokens
         },
+        estimated_cost_usd: usdMicrosToUsd(estimatedCostUsdMicros),
+        cache_hit: result.cacheHit ?? false,
         latency_ms: latencyMs,
         conversation_id: conversation?.id,
         assistant_message_id: assistantMessageId
@@ -238,6 +256,7 @@ export function buildApp(
       let providerName: "fake" | "openai" | "gemini" | null = null;
       let modelName: string | null = null;
       let usage = null as Awaited<ReturnType<LlmProvider["generate"]>>["usage"] | null;
+      let estimatedCostUsdMicros = 0;
 
       for await (const event of provider.stream(providerMessage, {
         signal: abortController.signal
@@ -267,6 +286,9 @@ export function buildApp(
 
         if (event.type === "usage") {
           usage = event.usage;
+          if (providerName) {
+            estimatedCostUsdMicros = estimateCostUsdMicros(event.usage, pricingCatalog[providerName]);
+          }
           reply.raw.write(
             encodeStreamEvent({
               type: "usage",
@@ -285,7 +307,8 @@ export function buildApp(
             content: assistantText,
             provider: providerName,
             model: modelName,
-            usage
+            usage,
+            estimatedCostUsdMicros
           });
         }
         reply.raw.write(encodeStreamEvent({ type: "end" }));
@@ -297,6 +320,32 @@ export function buildApp(
     } finally {
       reply.raw.end();
     }
+  });
+
+  app.get("/api/users/:userId/cost-summary", async (request, reply) => {
+    if (!conversationRepository) {
+      return reply.status(503).send({ detail: "Cost summary requires conversation persistence" });
+    }
+
+    const parsedParams = userParamsSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.status(422).send({
+        detail: "Invalid request",
+        errors: parsedParams.error.flatten().fieldErrors
+      });
+    }
+
+    const summary = await conversationRepository.getUserCostSummary(parsedParams.data.userId);
+    return {
+      user_id: summary.userId,
+      request_count: summary.requestCount,
+      input_tokens: summary.inputTokens,
+      output_tokens: summary.outputTokens,
+      thinking_tokens: summary.thinkingTokens,
+      total_tokens: summary.totalTokens,
+      estimated_cost_usd: usdMicrosToUsd(summary.estimatedCostUsdMicros),
+      estimated_cost_usd_micros: summary.estimatedCostUsdMicros
+    };
   });
 
   app.post("/api/structured/support-ticket", async (request, reply) => {
@@ -342,4 +391,44 @@ function writeRateLimitHeaders(
   if (!decision.allowed) {
     reply.header("Retry-After", Math.ceil(decision.retryAfterMs / 1000));
   }
+}
+
+function buildPricingCatalog(config: AppConfig): ProviderPricingCatalog {
+  return {
+    fake: {
+      inputUsdPerMillionTokens: 0,
+      outputUsdPerMillionTokens: 0,
+      thinkingUsdPerMillionTokens: 0
+    },
+    openai: {
+      inputUsdPerMillionTokens: config.OPENAI_INPUT_USD_PER_1M_TOKENS,
+      outputUsdPerMillionTokens: config.OPENAI_OUTPUT_USD_PER_1M_TOKENS,
+      thinkingUsdPerMillionTokens: config.OPENAI_THINKING_USD_PER_1M_TOKENS
+    },
+    gemini: {
+      inputUsdPerMillionTokens: config.GEMINI_INPUT_USD_PER_1M_TOKENS,
+      outputUsdPerMillionTokens: config.GEMINI_OUTPUT_USD_PER_1M_TOKENS,
+      thinkingUsdPerMillionTokens: config.GEMINI_THINKING_USD_PER_1M_TOKENS
+    }
+  };
+}
+
+function buildZeroPricingCatalog(): ProviderPricingCatalog {
+  return {
+    fake: {
+      inputUsdPerMillionTokens: 0,
+      outputUsdPerMillionTokens: 0,
+      thinkingUsdPerMillionTokens: 0
+    },
+    openai: {
+      inputUsdPerMillionTokens: 0,
+      outputUsdPerMillionTokens: 0,
+      thinkingUsdPerMillionTokens: 0
+    },
+    gemini: {
+      inputUsdPerMillionTokens: 0,
+      outputUsdPerMillionTokens: 0,
+      thinkingUsdPerMillionTokens: 0
+    }
+  };
 }
