@@ -5,35 +5,115 @@ export interface RecursiveChunkOptions {
   overlapCharacters: number;
 }
 
+export interface FixedSizeChunkOptions {
+  maxCharacters: number;
+  overlapCharacters: number;
+}
+
+export interface StructureAwareChunkOptions {
+  maxCharacters: number;
+  overlapCharacters: number;
+}
+
+export type ChunkingStrategy = "fixed-size" | "recursive-text" | "structure-aware";
+
+export interface ChunkStrategyComparison {
+  strategy: ChunkingStrategy;
+  chunkCount: number;
+  averageCharacters: number;
+  chunks: DocumentChunk[];
+}
+
 export function chunkCleanedPages(
   pages: CleanedPage[],
   parser: ParsedDocument["parser"],
   options: RecursiveChunkOptions
 ): DocumentChunk[] {
-  if (options.maxCharacters <= 0) {
-    throw new Error("maxCharacters must be positive");
-  }
-  if (options.overlapCharacters < 0 || options.overlapCharacters >= options.maxCharacters) {
-    throw new Error("overlapCharacters must be smaller than maxCharacters");
-  }
+  validateChunkOptions(options);
 
   const chunks: DocumentChunk[] = [];
   for (const page of pages) {
     for (const content of splitRecursive(page.text, options)) {
-      chunks.push({
-        chunkIndex: chunks.length,
-        pageNumber: page.pageNumber,
-        content,
-        metadata: {
-          page: page.pageNumber,
-          parser,
-          chunking: "recursive-text",
-          tokenEstimate: estimateTokens(content)
-        }
-      });
+      chunks.push(createChunk(chunks.length, page.pageNumber, content, parser, "recursive-text"));
     }
   }
   return chunks;
+}
+
+export function chunkFixedSizePages(
+  pages: CleanedPage[],
+  parser: ParsedDocument["parser"],
+  options: FixedSizeChunkOptions
+): DocumentChunk[] {
+  validateChunkOptions(options);
+
+  const chunks: DocumentChunk[] = [];
+  for (const page of pages) {
+    let start = 0;
+    while (start < page.text.length) {
+      const content = page.text.slice(start, start + options.maxCharacters).trim();
+      if (content.length > 0) {
+        chunks.push(createChunk(chunks.length, page.pageNumber, content, parser, "fixed-size"));
+      }
+
+      if (start + options.maxCharacters >= page.text.length) {
+        break;
+      }
+      start += options.maxCharacters - options.overlapCharacters;
+    }
+  }
+
+  return chunks;
+}
+
+export function chunkStructureAwarePages(
+  pages: CleanedPage[],
+  parser: ParsedDocument["parser"],
+  options: StructureAwareChunkOptions
+): DocumentChunk[] {
+  validateChunkOptions(options);
+
+  const chunks: DocumentChunk[] = [];
+  for (const page of pages) {
+    for (const section of splitMarkdownSections(page.text)) {
+      for (const content of splitRecursive(section.content, options)) {
+        chunks.push(
+          createChunk(
+            chunks.length,
+            page.pageNumber,
+            content,
+            parser,
+            "structure-aware",
+            section.title
+          )
+        );
+      }
+    }
+  }
+
+  return chunks;
+}
+
+export function compareChunkingStrategies(
+  pages: CleanedPage[],
+  parser: ParsedDocument["parser"],
+  options: RecursiveChunkOptions
+): ChunkStrategyComparison[] {
+  const strategies: Array<[ChunkingStrategy, DocumentChunk[]]> = [
+    ["fixed-size", chunkFixedSizePages(pages, parser, options)],
+    ["recursive-text", chunkCleanedPages(pages, parser, options)],
+    ["structure-aware", chunkStructureAwarePages(pages, parser, options)]
+  ];
+
+  return strategies.map(([strategy, chunks]) => ({
+    strategy,
+    chunkCount: chunks.length,
+    averageCharacters:
+      chunks.length === 0
+        ? 0
+        : Math.round(chunks.reduce((sum, chunk) => sum + chunk.content.length, 0) / chunks.length),
+    chunks
+  }));
 }
 
 function splitRecursive(text: string, options: RecursiveChunkOptions): string[] {
@@ -73,6 +153,74 @@ function chooseSplitIndex(text: string, maxCharacters: number): number {
   }
 
   return maxCharacters;
+}
+
+function validateChunkOptions(options: RecursiveChunkOptions): void {
+  if (options.maxCharacters <= 0) {
+    throw new Error("maxCharacters must be positive");
+  }
+  if (options.overlapCharacters < 0 || options.overlapCharacters >= options.maxCharacters) {
+    throw new Error("overlapCharacters must be smaller than maxCharacters");
+  }
+}
+
+interface TextSection {
+  title?: string;
+  content: string;
+}
+
+function splitMarkdownSections(text: string): TextSection[] {
+  const lines = text.split("\n");
+  const sections: TextSection[] = [];
+  let currentTitle: string | undefined;
+  let currentLines: string[] = [];
+
+  for (const line of lines) {
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line.trim());
+    if (heading && currentLines.length > 0) {
+      sections.push({
+        title: currentTitle,
+        content: currentLines.join("\n").trim()
+      });
+      currentLines = [];
+    }
+
+    if (heading) {
+      currentTitle = heading[2]!.trim();
+    }
+    currentLines.push(line);
+  }
+
+  if (currentLines.length > 0) {
+    sections.push({
+      title: currentTitle,
+      content: currentLines.join("\n").trim()
+    });
+  }
+
+  return sections.filter((section) => section.content.length > 0);
+}
+
+function createChunk(
+  chunkIndex: number,
+  pageNumber: number,
+  content: string,
+  parser: ParsedDocument["parser"],
+  chunking: ChunkingStrategy,
+  sectionTitle?: string
+): DocumentChunk {
+  return {
+    chunkIndex,
+    pageNumber,
+    content,
+    metadata: {
+      page: pageNumber,
+      parser,
+      chunking,
+      ...(sectionTitle ? { sectionTitle } : {}),
+      tokenEstimate: estimateTokens(content)
+    }
+  };
 }
 
 function estimateTokens(text: string): number {

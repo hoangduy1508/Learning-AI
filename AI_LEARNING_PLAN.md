@@ -221,7 +221,7 @@ Definition of Done:
 Kiến thức:
 
 - [x] Hiểu parse, OCR, clean, chunk, embed và index
-- [ ] So sánh fixed-size, recursive và structure-aware chunking
+- [x] So sánh fixed-size, recursive và structure-aware chunking
 - [ ] Hiểu chunk overlap và parent-child chunking
 - [ ] Hiểu tác động của bảng, header, footer và scanned PDF
 - [ ] Hiểu document versioning và re-indexing
@@ -230,7 +230,7 @@ Thực hành:
 
 - [ ] Upload và kiểm tra loại/kích thước file
 - [ ] Parse PDF và giữ page number
-- [ ] Chunk theo cấu trúc tài liệu khi có thể
+- [x] Chunk theo cấu trúc tài liệu khi có thể
 - [ ] Batch embedding
 - [ ] Lưu checksum để tránh xử lý trùng
 - [ ] Thêm trạng thái ingestion và error recovery
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: RAG Ingestion Pipeline
 - Current week: Tuần 6
-- Current task: So sánh fixed-size, recursive và structure-aware chunking; mở rộng ingestion từ lab sang file upload/PDF parser thật
+- Current task: Học chunk overlap và parent-child chunking; thiết kế cách lưu parent section/page để retrieval không mất ngữ cảnh
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -947,6 +947,19 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 80 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `Hiểu parse, OCR, clean, chunk, embed và index` ở mức lab có code/test; PDF parser nhị phân thật, upload validation, checksum và job recovery vẫn là các task thực hành tiếp theo.
 - Task tiếp theo: so sánh fixed-size, recursive và structure-aware chunking; sau đó mở rộng ingestion sang upload và parse PDF thật có page number.
+
+### 2026-07-05 - So sánh fixed-size, recursive và structure-aware chunking
+
+- Mở rộng `backend/src/ingestion/chunking.ts` với ba strategy: `chunkFixedSizePages()`, `chunkCleanedPages()` cho recursive text splitting và `chunkStructureAwarePages()`.
+- Thêm `compareChunkingStrategies()` để lab in số chunk, độ dài trung bình và metadata tiêu biểu của từng strategy.
+- `structure-aware` nhận diện heading Markdown, chunk theo section trước rồi mới recursive split trong section, đồng thời lưu `sectionTitle` vào metadata chunk.
+- Cập nhật `DocumentChunk.metadata.chunking` thành union `fixed-size | recursive-text | structure-aware`.
+- Cập nhật `backend/src/scripts/ingestion-lab.ts` để in phần `Chunking strategy comparison` bên cạnh kết quả ingestion/retrieval.
+- Cập nhật `backend/docs/10_RAG_INGESTION_PIPELINE.md` với trade-off: fixed-size đơn giản nhưng dễ cắt ngang ý, recursive là default tốt cho text thường, structure-aware hữu ích khi parser giữ được heading/section.
+- Thêm test kiểm chứng ba strategy, thứ tự comparison và metadata `sectionTitle` cho structure-aware chunk.
+- Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 81 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `So sánh fixed-size, recursive và structure-aware chunking` và task thực hành `Chunk theo cấu trúc tài liệu khi có thể`.
+- Task tiếp theo: học chunk overlap và parent-child chunking, sau đó thiết kế parent section/page metadata để retrieval lấy được ngữ cảnh rộng hơn khi cần.
 
 ## Session Notes Template
 

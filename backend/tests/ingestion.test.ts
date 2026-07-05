@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createDeterministicEmbedding } from "../src/embeddings/deterministic.js";
-import { chunkCleanedPages } from "../src/ingestion/chunking.js";
+import {
+  chunkCleanedPages,
+  chunkFixedSizePages,
+  chunkStructureAwarePages,
+  compareChunkingStrategies
+} from "../src/ingestion/chunking.js";
 import { cleanText } from "../src/ingestion/clean.js";
 import { parseSourceDocument } from "../src/ingestion/parser.js";
 import { IngestionPipeline } from "../src/ingestion/pipeline.js";
@@ -45,6 +50,52 @@ describe("ingestion pipeline", () => {
     assert.ok(chunks.length > 1);
     assert.ok(chunks.every((chunk) => chunk.metadata.page === 3));
     assert.ok(chunks.every((chunk) => chunk.content.length <= 43));
+  });
+
+  it("compares fixed-size, recursive, and structure-aware chunking", () => {
+    const pages = [
+      {
+        pageNumber: 1,
+        originalLength: 180,
+        text: [
+          "# Billing",
+          "Billing policy explains invoices and refunds.",
+          "",
+          "# Security",
+          "Security policy explains tenant isolation and audit logs."
+        ].join("\n")
+      }
+    ];
+
+    const fixed = chunkFixedSizePages(pages, "plain-text", {
+      maxCharacters: 48,
+      overlapCharacters: 8
+    });
+    const recursive = chunkCleanedPages(pages, "plain-text", {
+      maxCharacters: 48,
+      overlapCharacters: 8
+    });
+    const structured = chunkStructureAwarePages(pages, "plain-text", {
+      maxCharacters: 80,
+      overlapCharacters: 8
+    });
+
+    assert.equal(fixed[0]?.metadata.chunking, "fixed-size");
+    assert.equal(recursive[0]?.metadata.chunking, "recursive-text");
+    assert.deepEqual(
+      structured.map((chunk) => chunk.metadata.sectionTitle),
+      ["Billing", "Security"]
+    );
+
+    const comparison = compareChunkingStrategies(pages, "plain-text", {
+      maxCharacters: 60,
+      overlapCharacters: 8
+    });
+    assert.deepEqual(
+      comparison.map((entry) => entry.strategy),
+      ["fixed-size", "recursive-text", "structure-aware"]
+    );
+    assert.ok(comparison.every((entry) => entry.chunkCount > 0));
   });
 
   it("parses, cleans, chunks, embeds, and indexes a document", async () => {

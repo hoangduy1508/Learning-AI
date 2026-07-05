@@ -56,7 +56,7 @@ khong can thiet.
 
 ## Chunk
 
-`chunkCleanedPages()` dang dung recursive text splitting:
+Pipeline mac dinh van dung `chunkCleanedPages()` voi recursive text splitting:
 
 1. Uu tien cat theo paragraph.
 2. Neu khong duoc, cat theo newline.
@@ -72,7 +72,28 @@ Moi chunk luu metadata:
 - `page`: page number de citation.
 - `parser`: parser da tao text.
 - `chunking`: strategy da dung.
+- `sectionTitle`: section heading neu strategy co the nhan dien.
 - `tokenEstimate`: uoc tinh token don gian de quan sat kich thuoc chunk.
+
+## So sanh chunking strategies
+
+Module `backend/src/ingestion/chunking.ts` co ba strategy de so sanh:
+
+- `fixed-size`: cat theo so ky tu co dinh. Don gian, deterministic, de batch, nhung co the cat ngang cau,
+  bang hoac heading.
+- `recursive-text`: uu tien paragraph/newline/cau/space truoc khi hard cut. Day la default tot cho text
+  chung vi giu boundary tu nhien hon fixed-size.
+- `structure-aware`: nhan dien heading Markdown va chunk theo section truoc, sau do moi recursive split trong
+  section. Cach nay huu ich voi tai lieu co heading ro rang vi chunk co them `sectionTitle`, nhung se kem tac
+  dung voi PDF parse ra text mat cau truc.
+
+Trade-off quan trong:
+
+- Chunk qua nho: retrieval co the lay dung keyword nhung thieu ngu canh de answer.
+- Chunk qua lon: it mat context hon nhung tang token, giam do chinh xac cua top-k va lam prompt nang hon.
+- Overlap giup giu ngu canh o bien chunk, nhung overlap cao lam tang so chunk va chi phi embedding.
+- Structure-aware tot khi parser giu duoc heading/list/table; neu parser lam mat cau truc thi phai fallback
+  ve recursive/fixed-size.
 
 ## Embed va index
 
@@ -94,7 +115,8 @@ npm run learn:ingestion
 ```
 
 Lab se ingest mot tai lieu PDF text-pages mo phong, sau do query top-k tu in-memory vector repository va
-in page number cua cac match.
+in page number cua cac match. Lab cung in so chunk trung binh cua `fixed-size`, `recursive-text` va
+`structure-aware` de thay trade-off.
 
 ## Gioi han hien tai
 

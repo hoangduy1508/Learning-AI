@@ -30,7 +30,8 @@ export interface DocumentChunk {
   metadata: {
     page: number;
     parser: ParsedDocument["parser"];
-    chunking: "recursive-text";
+    chunking: "fixed-size" | "recursive-text" | "structure-aware";
+    sectionTitle?: string;
     tokenEstimate: number;
   };
 }
