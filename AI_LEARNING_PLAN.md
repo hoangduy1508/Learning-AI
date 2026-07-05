@@ -223,7 +223,7 @@ Kiến thức:
 - [x] Hiểu parse, OCR, clean, chunk, embed và index
 - [x] So sánh fixed-size, recursive và structure-aware chunking
 - [x] Hiểu chunk overlap và parent-child chunking
-- [ ] Hiểu tác động của bảng, header, footer và scanned PDF
+- [x] Hiểu tác động của bảng, header, footer và scanned PDF
 - [ ] Hiểu document versioning và re-indexing
 
 Thực hành:
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: RAG Ingestion Pipeline
 - Current week: Tuần 6
-- Current task: Học tác động của bảng, header, footer và scanned PDF lên ingestion/chunking
+- Current task: Học document versioning và re-indexing; thiết kế checksum/version để tránh xử lý trùng
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -973,6 +973,19 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 82 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `Hiểu chunk overlap và parent-child chunking`.
 - Task tiếp theo: học tác động của bảng, header, footer và scanned PDF lên parse/clean/chunk; thêm bước clean hoặc parser metadata để phát hiện nhiễu tài liệu.
+
+### 2026-07-05 - Bảng, header/footer và scanned PDF trong ingestion
+
+- Thêm `backend/src/ingestion/artifacts.ts` với `analyzeDocumentArtifacts()` để tạo báo cáo artifact sau parse.
+- Báo cáo artifact gồm `tableLikeLineCount`, `repeatedLines`, `hasExtractableText` và `scannedPdfLikely`.
+- Mở rộng `cleanParsedDocument()` với tùy chọn `repeatedLineMinPages` để loại các dòng lặp trên nhiều trang, ví dụ header/footer hoặc tiêu đề bảng lặp.
+- Cập nhật `backend/src/scripts/ingestion-lab.ts` để tài liệu mô phỏng có header lặp và dòng bảng; lab in thêm `Document artifact report`.
+- Chuẩn hóa `backend/docs/10_RAG_INGESTION_PIPELINE.md` sang tiếng Việt có dấu và bổ sung phần Artifact Analysis.
+- Ghi chú kiến thức: bảng dễ mất cấu trúc cột/hàng khi parse, header/footer lặp có thể chiếm top-k nhưng nghèo thông tin, scanned PDF không có text extractable cần OCR thay vì embed rỗng.
+- Thêm test kiểm chứng phát hiện dòng bảng, header/footer lặp, clean dòng lặp và nhận diện PDF không có text extractable là likely scanned PDF.
+- Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 84 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `Hiểu tác động của bảng, header, footer và scanned PDF`.
+- Task tiếp theo: học document versioning và re-indexing; thiết kế checksum/version để tránh xử lý trùng và chuẩn bị cho re-upload cùng file.
 
 ## Session Notes Template
 

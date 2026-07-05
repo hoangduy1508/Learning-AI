@@ -1,18 +1,18 @@
 # RAG Ingestion Pipeline
 
-## Muc tieu
+## Mục tiêu
 
-Tuan 6 bat dau bang pipeline dua tai lieu vao vector index:
+Tuần 6 bắt đầu bằng pipeline đưa tài liệu vào vector index:
 
-- Parse tai lieu thanh text co page number.
-- Clean text de giam nhieu truoc khi chunk.
-- Chunk text thanh cac passage co kich thuoc on dinh.
-- Embed tung chunk.
-- Index chunk kem metadata de retrieval co the trace ve document/page.
+- Parse tài liệu thành text có số trang.
+- Clean text để giảm nhiễu trước khi chunk.
+- Chunk text thành các passage có kích thước ổn định.
+- Embed từng chunk.
+- Index chunk kèm metadata để retrieval có thể trace về document/page.
 
 ## Flow
 
-Pipeline hien nam tai `backend/src/ingestion/pipeline.ts`:
+Pipeline hiện nằm tại `backend/src/ingestion/pipeline.ts`:
 
 ```text
 SourceDocument
@@ -23,131 +23,151 @@ SourceDocument
   -> VectorRepository.createDocument()/insertChunk()
 ```
 
-Trong lab nay, `application/pdf` duoc mo phong bang plain text co delimiter `---page---`.
-Dieu quan trong can hoc o buoc nay la contract cua ingestion: parser phai tra ve page number,
-chunk phai giu metadata page, va index phai luu metadata do cung embedding.
+Trong lab này, `application/pdf` được mô phỏng bằng plain text có delimiter `---page---`.
+Điều quan trọng cần học ở bước này là contract của ingestion: parser phải trả về page number,
+chunk phải giữ metadata page, và index phải lưu metadata đó cùng embedding.
 
-PDF parser nhi phan that se duoc them o task tiep theo. Scanned PDF/OCR cung la mot nhanh rieng:
-neu parser khong lay duoc text, ingestion job can danh dau loi ro rang thay vi tao chunk rong.
+PDF parser nhị phân thật sẽ được thêm ở task tiếp theo. Scanned PDF/OCR cũng là một nhánh riêng:
+nếu parser không lấy được text, ingestion job cần đánh dấu lỗi rõ ràng thay vì tạo chunk rỗng.
 
 ## Parse
 
-`parseSourceDocument()` tra ve `ParsedDocument` gom:
+`parseSourceDocument()` trả về `ParsedDocument` gồm:
 
-- `parser`: loai parser da dung.
-- `pages`: mang `{ pageNumber, text }`.
-- `title` va `sourceUri`.
+- `parser`: loại parser đã dùng.
+- `pages`: mảng `{ pageNumber, text }`.
+- `title` và `sourceUri`.
 
-Plain text mac dinh la mot page. PDF text pages tach theo `---page---` de lab co the kiem chung
-page trace ma chua can dependency parse PDF.
+Plain text mặc định là một page. PDF text-pages tách theo `---page---` để lab có thể kiểm chứng
+page trace mà chưa cần dependency parse PDF thật.
 
 ## Clean
 
-`cleanText()` xu ly cac loi thuong gap sau parse:
+`cleanText()` xử lý các lỗi thường gặp sau parse:
 
-- Chuan hoa CRLF ve LF.
-- Bo trailing spaces truoc newline.
-- Gop nhieu dong trong thanh toi da hai newline.
-- Gop nhieu space/tab thanh mot space.
-- Trim dau/cuoi document.
+- Chuẩn hóa CRLF về LF.
+- Bỏ trailing spaces trước newline.
+- Gộp nhiều dòng trống thành tối đa hai newline.
+- Gộp nhiều space/tab thành một space.
+- Trim đầu/cuối document.
 
-Cleaning nen duoc lam truoc chunking vi whitespace nhieu lam chunk bi cat vo nghia va tang token
-khong can thiet.
+`cleanParsedDocument()` có tùy chọn `repeatedLineMinPages` để loại các dòng lặp lại trên nhiều trang,
+ví dụ header/footer PDF như tên công ty, nhãn bảo mật hoặc tiêu đề bảng lặp.
+
+Cleaning nên được làm trước chunking vì whitespace và header/footer lặp làm chunk bị cắt vô nghĩa,
+tăng token và khiến retrieval trả về context nghèo thông tin.
+
+## Artifact Analysis
+
+`analyzeDocumentArtifacts()` trong `backend/src/ingestion/artifacts.ts` tạo báo cáo nhanh về các vấn đề
+thường gặp sau khi parse:
+
+- `tableLikeLineCount`: số dòng giống bảng, ví dụ có nhiều cột phân tách bằng `|` hoặc nhiều khoảng trắng.
+- `repeatedLines`: dòng xuất hiện trên nhiều page, thường là header/footer hoặc tiêu đề bảng lặp.
+- `hasExtractableText`: parser có lấy được text thật hay không.
+- `scannedPdfLikely`: PDF có vẻ là scanned PDF khi không có text extractable.
+
+Tác động cần nhớ:
+
+- Bảng dễ bị parse mất cấu trúc cột/hàng. Nếu table quan trọng, nên giữ row boundary hoặc chuyển table thành
+  dạng Markdown/CSV-like trước khi chunk.
+- Header/footer lặp lại có thể chiếm top-k vì xuất hiện ở nhiều page nhưng không trả lời câu hỏi thật.
+- Scanned PDF không có text extractable cần OCR; không nên embed chuỗi rỗng hoặc thông báo lỗi mơ hồ.
 
 ## Chunk
 
-Pipeline mac dinh van dung `chunkCleanedPages()` voi recursive text splitting:
+Pipeline mặc định vẫn dùng `chunkCleanedPages()` với recursive text splitting:
 
-1. Uu tien cat theo paragraph.
-2. Neu khong duoc, cat theo newline.
-3. Sau do cat theo cau.
-4. Cuoi cung moi cat theo space hoac hard limit.
+1. Ưu tiên cắt theo paragraph.
+2. Nếu không được, cắt theo newline.
+3. Sau đó cắt theo câu.
+4. Cuối cùng mới cắt theo space hoặc hard limit.
 
-Chunk co `overlapCharacters` de chunk sau mang mot phan ngu canh tu chunk truoc. Overlap giup retrieval
-khong mat thong tin nam ngay bien chunk, nhung overlap qua lon se tang so chunk, token, chi phi embedding
-va nguy co duplicate context.
+Chunk có `overlapCharacters` để chunk sau mang một phần ngữ cảnh từ chunk trước. Overlap giúp retrieval
+không mất thông tin nằm ngay biên chunk, nhưng overlap quá lớn sẽ tăng số chunk, token, chi phí embedding
+và nguy cơ duplicate context.
 
-Moi chunk luu metadata:
+Mỗi chunk lưu metadata:
 
-- `page`: page number de citation.
-- `parser`: parser da tao text.
-- `chunking`: strategy da dung.
-- `sectionTitle`: section heading neu strategy co the nhan dien.
-- `tokenEstimate`: uoc tinh token don gian de quan sat kich thuoc chunk.
+- `page`: page number để citation.
+- `parser`: parser đã tạo text.
+- `chunking`: strategy đã dùng.
+- `sectionTitle`: section heading nếu strategy có thể nhận diện.
+- `tokenEstimate`: ước tính token đơn giản để quan sát kích thước chunk.
 
-## So sanh chunking strategies
+## So Sánh Chunking Strategies
 
-Module `backend/src/ingestion/chunking.ts` co ba strategy de so sanh:
+Module `backend/src/ingestion/chunking.ts` có ba strategy để so sánh:
 
-- `fixed-size`: cat theo so ky tu co dinh. Don gian, deterministic, de batch, nhung co the cat ngang cau,
-  bang hoac heading.
-- `recursive-text`: uu tien paragraph/newline/cau/space truoc khi hard cut. Day la default tot cho text
-  chung vi giu boundary tu nhien hon fixed-size.
-- `structure-aware`: nhan dien heading Markdown va chunk theo section truoc, sau do moi recursive split trong
-  section. Cach nay huu ich voi tai lieu co heading ro rang vi chunk co them `sectionTitle`, nhung se kem tac
-  dung voi PDF parse ra text mat cau truc.
+- `fixed-size`: cắt theo số ký tự cố định. Đơn giản, deterministic, dễ batch, nhưng có thể cắt ngang câu,
+  bảng hoặc heading.
+- `recursive-text`: ưu tiên paragraph/newline/câu/space trước khi hard cut. Đây là default tốt cho text
+  chung vì giữ boundary tự nhiên hơn fixed-size.
+- `structure-aware`: nhận diện heading Markdown và chunk theo section trước, sau đó mới recursive split trong
+  section. Cách này hữu ích với tài liệu có heading rõ ràng vì chunk có thêm `sectionTitle`, nhưng kém tác dụng
+  nếu PDF parse ra text mất cấu trúc.
 
-Trade-off quan trong:
+Trade-off quan trọng:
 
-- Chunk qua nho: retrieval co the lay dung keyword nhung thieu ngu canh de answer.
-- Chunk qua lon: it mat context hon nhung tang token, giam do chinh xac cua top-k va lam prompt nang hon.
-- Overlap giup giu ngu canh o bien chunk, nhung overlap cao lam tang so chunk va chi phi embedding.
-- Structure-aware tot khi parser giu duoc heading/list/table; neu parser lam mat cau truc thi phai fallback
-  ve recursive/fixed-size.
+- Chunk quá nhỏ: retrieval có thể lấy đúng keyword nhưng thiếu ngữ cảnh để answer.
+- Chunk quá lớn: ít mất context hơn nhưng tăng token, giảm độ chính xác của top-k và làm prompt nặng hơn.
+- Overlap giúp giữ ngữ cảnh ở biên chunk, nhưng overlap cao làm tăng số chunk và chi phí embedding.
+- Structure-aware tốt khi parser giữ được heading/list/table; nếu parser làm mất cấu trúc thì phải fallback
+  về recursive/fixed-size.
 
-## Overlap va parent-child chunking
+## Overlap Và Parent-Child Chunking
 
-Overlap copy mot phan cuoi cua chunk truoc sang chunk sau. Loi ich la query van co the match khi y quan trong
-nam ngay bien chunk. Cai gia phai tra la:
+Overlap copy một phần cuối của chunk trước sang chunk sau. Lợi ích là query vẫn có thể match khi ý quan trọng
+nằm ngay biên chunk. Cái giá phải trả là:
 
-- Nhieu chunk hon.
-- Nhieu embedding hon.
-- Retrieved context de bi lap lai noi dung.
+- Nhiều chunk hơn.
+- Nhiều embedding hơn.
+- Retrieved context dễ bị lặp lại nội dung.
 
-Parent-child chunking giai quyet mot trade-off khac:
+Parent-child chunking giải quyết một trade-off khác:
 
-- Parent chunk lon hon, thuong la page hoac section, de giu ngu canh doc hieu.
-- Child chunk nho hon, co overlap, duoc embed va dung de vector search.
-- Khi child chunk match query, metadata `parentChunkIndex` va `parentSectionTitle` cho phep he thong lay parent
-  context rong hon de tao cau tra loi.
+- Parent chunk lớn hơn, thường là page hoặc section, để giữ ngữ cảnh đọc hiểu.
+- Child chunk nhỏ hơn, có overlap, được embed và dùng để vector search.
+- Khi child chunk match query, metadata `parentChunkIndex` và `parentSectionTitle` cho phép hệ thống lấy parent
+  context rộng hơn để tạo câu trả lời.
 
-Trong lab, `createParentChildChunks()` tao parent bang structure-aware chunking, sau do cat parent thanh child
-chunk nho hon. Child chunk luu metadata:
+Trong lab, `createParentChildChunks()` tạo parent bằng structure-aware chunking, sau đó cắt parent thành child
+chunk nhỏ hơn. Child chunk lưu metadata:
 
-- `parentChunkIndex`: parent trong cung document/page.
-- `parentSectionTitle`: heading cua section neu co.
-- `childOverlapCharacters`: overlap da dung khi cat child.
+- `parentChunkIndex`: parent trong cùng document/page.
+- `parentSectionTitle`: heading của section nếu có.
+- `childOverlapCharacters`: overlap đã dùng khi cắt child.
 
-Production thuong khong nen dua toan bo parent vao moi metadata row neu parent qua lon. Tot hon la luu parent
-chunk rieng trong database va de child row chi reference parent id/index.
+Production thường không nên đưa toàn bộ parent vào mỗi metadata row nếu parent quá lớn. Tốt hơn là lưu parent
+chunk riêng trong database và để child row chỉ reference parent id/index.
 
-## Embed va index
+## Embed Và Index
 
-Lab dung `createDeterministicEmbedding()` de chay offline. Production se thay bang embedding provider that,
-nhung repository contract khong doi:
+Lab dùng `createDeterministicEmbedding()` để chạy offline. Production sẽ thay bằng embedding provider thật,
+nhưng repository contract không đổi:
 
-- Document duoc tao mot lan trong `rag_documents`.
-- Tung chunk duoc insert vao `rag_document_chunks`.
-- Metadata page/parser/chunking di kem content va embedding.
+- Document được tạo một lần trong `rag_documents`.
+- Từng chunk được insert vào `rag_document_chunks`.
+- Metadata page/parser/chunking đi kèm content và embedding.
 
-Day la nen tang cho citation ve sau: cau tra loi RAG chi nen trich dan document/page nam trong retrieved
-context, khong de model tu tao citation.
+Đây là nền tảng cho citation về sau: câu trả lời RAG chỉ nên trích dẫn document/page nằm trong retrieved
+context, không để model tự tạo citation.
 
-## Chay lab
+## Chạy Lab
 
 ```powershell
 cd backend
 npm run learn:ingestion
 ```
 
-Lab se ingest mot tai lieu PDF text-pages mo phong, sau do query top-k tu in-memory vector repository va
-in page number cua cac match. Lab cung in so chunk trung binh cua `fixed-size`, `recursive-text`,
-`structure-aware` va so parent/child chunk de thay trade-off.
+Lab sẽ ingest một tài liệu PDF text-pages mô phỏng, sau đó query top-k từ in-memory vector repository và
+in page number của các match. Lab cũng in báo cáo artifact, số chunk trung bình của `fixed-size`,
+`recursive-text`, `structure-aware` và số parent/child chunk để thấy trade-off.
 
-## Gioi han hien tai
+## Giới Hạn Hiện Tại
 
-- Chua co upload endpoint va file size/type validation.
-- Chua parse PDF nhi phan that.
-- Chua co OCR cho scanned PDF.
-- Chua co checksum/document versioning de tranh xu ly trung.
-- Chua co ingestion job status va error recovery.
+- Chưa có upload endpoint và file size/type validation.
+- Chưa parse PDF nhị phân thật.
+- Chưa có OCR cho scanned PDF.
+- Chưa có checksum/document versioning để tránh xử lý trùng.
+- Chưa có ingestion job status và error recovery.

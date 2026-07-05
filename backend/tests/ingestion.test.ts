@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createDeterministicEmbedding } from "../src/embeddings/deterministic.js";
+import { analyzeDocumentArtifacts } from "../src/ingestion/artifacts.js";
 import {
   chunkCleanedPages,
   chunkFixedSizePages,
@@ -9,7 +10,7 @@ import {
   compareChunkingStrategies,
   createParentChildChunks
 } from "../src/ingestion/chunking.js";
-import { cleanText } from "../src/ingestion/clean.js";
+import { cleanParsedDocument, cleanText } from "../src/ingestion/clean.js";
 import { parseSourceDocument } from "../src/ingestion/parser.js";
 import { IngestionPipeline } from "../src/ingestion/pipeline.js";
 import { InMemoryVectorRepository } from "../src/vector/repository.js";
@@ -33,6 +34,49 @@ describe("ingestion pipeline", () => {
 
   it("cleans noisy whitespace before chunking", () => {
     assert.equal(cleanText(" Hello   world \r\n\r\n\r\n next  line \t\n"), "Hello world\n\n next line");
+  });
+
+  it("detects tables and repeated headers or footers in parsed documents", () => {
+    const parsed = parseSourceDocument({
+      tenantId: "tenant_a",
+      ownerUserId: "user_a",
+      title: "Policy PDF",
+      mimeType: "application/pdf",
+      content: [
+        "Company Confidential",
+        "Metric | Owner | Status",
+        "Latency | Platform | Green",
+        "Page 1",
+        "---page---",
+        "Company Confidential",
+        "Metric | Owner | Status",
+        "Cost | Finance | Yellow",
+        "Page 2"
+      ].join("\n")
+    });
+
+    const report = analyzeDocumentArtifacts(parsed);
+    assert.equal(report.scannedPdfLikely, false);
+    assert.equal(report.tableLikeLineCount, 4);
+    assert.deepEqual(report.repeatedLines.sort(), ["Company Confidential", "Metric | Owner | Status"]);
+
+    const cleaned = cleanParsedDocument(parsed, { repeatedLineMinPages: 2 });
+    assert.ok(cleaned.every((page) => !page.text.includes("Company Confidential")));
+    assert.ok(cleaned.every((page) => !page.text.includes("Metric | Owner | Status")));
+  });
+
+  it("treats PDF pages without extractable text as a likely scanned document", () => {
+    const report = analyzeDocumentArtifacts({
+      title: "Scanned PDF",
+      parser: "pdf-text-pages",
+      pages: [
+        { pageNumber: 1, text: " \n \t " },
+        { pageNumber: 2, text: "\n" }
+      ]
+    });
+
+    assert.equal(report.hasExtractableText, false);
+    assert.equal(report.scannedPdfLikely, true);
   });
 
   it("splits long pages with bounded overlap and page metadata", () => {

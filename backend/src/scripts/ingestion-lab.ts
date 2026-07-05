@@ -1,4 +1,5 @@
 import { createDeterministicEmbedding } from "../embeddings/deterministic.js";
+import { analyzeDocumentArtifacts } from "../ingestion/artifacts.js";
 import { compareChunkingStrategies, createParentChildChunks } from "../ingestion/chunking.js";
 import { cleanParsedDocument } from "../ingestion/clean.js";
 import { parseSourceDocument } from "../ingestion/parser.js";
@@ -22,18 +23,25 @@ const source: SourceDocument = {
   sourceUri: "memory://rag-ingestion-notes.pdf",
   mimeType: "application/pdf",
   content: [
+    "AI Learning Handbook",
     "# Parsing",
     "RAG ingestion starts by parsing the source document and preserving page numbers.",
+    "Metric | Owner | Status",
+    "Parser | Platform | Green",
     "Cleaning removes noisy whitespace before chunking.",
     "---page---",
+    "AI Learning Handbook",
     "# Chunking",
     "Chunking should keep enough context for retrieval while avoiding overly large prompts.",
+    "Metric | Owner | Status",
+    "Chunker | Search | Yellow",
     "Each chunk is embedded and indexed with metadata so citations can point back to pages."
   ].join("\n\n")
 };
 
 const parsed = parseSourceDocument(source);
-const cleanedPages = cleanParsedDocument(parsed);
+const artifactReport = analyzeDocumentArtifacts(parsed);
+const cleanedPages = cleanParsedDocument(parsed, { repeatedLineMinPages: 2 });
 const comparisons = compareChunkingStrategies(cleanedPages, parsed.parser, {
   maxCharacters: 120,
   overlapCharacters: 24
@@ -55,6 +63,8 @@ const matches = await repository.searchTopK({
 
 console.log("Ingestion result");
 console.log(JSON.stringify(result, null, 2));
+console.log("\nDocument artifact report");
+console.log(JSON.stringify(artifactReport, null, 2));
 console.log("\nChunking strategy comparison");
 for (const comparison of comparisons) {
   const firstChunk = comparison.chunks[0];
