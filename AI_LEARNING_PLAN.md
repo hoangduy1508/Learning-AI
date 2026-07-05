@@ -184,7 +184,7 @@ Thực hành:
 - [x] Thêm giới hạn message/context
 - [x] Thêm rate limit theo user
 - [x] Theo dõi cost theo request và user
-- [ ] Hoàn thiện Project 1
+- [x] Hoàn thiện Project 1
 
 Definition of Done:
 
@@ -526,9 +526,9 @@ Observability / Evaluation / Cost Tracking
 
 ## Current Progress
 
-- Current phase: Conversation và Production Basics
-- Current week: Tuần 4
-- Current task: Hoàn thiện Project 1
+- Current phase: Embedding và Vector Search
+- Current week: Tuần 5
+- Current task: Chạy PostgreSQL + pgvector bằng Docker và học embedding/vector dimension
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -866,6 +866,20 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm test` có 67 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `Theo dõi cost theo request và user`.
 - Task tiếp theo: hoàn thiện Project 1.
+
+### 2026-07-05 - Hoàn thiện Project 1 Streaming AI Chat
+
+- Hoàn thiện UI Streaming Chat thành bề mặt demo Project 1: hiển thị conversation id, provider/model, token usage, latency và estimated request cost.
+- Frontend gửi rõ `userId=demo-user` khi gọi `/api/chat/stream` để cost summary và ownership/persistence flow có user ổn định.
+- Thêm API client `frontend/src/api/cost-summary.ts` và panel `Project telemetry` để đọc `GET /api/users/:userId/cost-summary` khi backend có conversation persistence.
+- Backend stream usage event trả thêm `estimatedCostUsd`, giúp UI hiển thị cost cho streaming response.
+- Cập nhật frontend tests cho stream request body có `userId`, usage event có `estimatedCostUsd` và cost summary API.
+- Cập nhật README root/backend/frontend thành tài liệu Project 1: tính năng, cách verify, production knobs, cost summary endpoint và demo surface.
+- Kiểm chứng backend: `npm run typecheck` thành công; `npm test` có 67 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Kiểm chứng frontend: `npm run typecheck`, `npm test` có 11 test pass và `npm run build` thành công.
+- Thử start dev server trong nền bằng `Start-Process` nhưng process không giữ lại trong phiên shell hiện tại; chạy trực tiếp `npm run dev` hoạt động, nên demo local cần mở 2 terminal thủ công nếu muốn xem UI.
+- Hoàn thành task `Hoàn thiện Project 1`.
+- Task tiếp theo: bắt đầu Tuần 5, chạy PostgreSQL + pgvector bằng Docker và học embedding/vector dimension.
 
 ## Session Notes Template
 

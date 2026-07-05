@@ -16,7 +16,7 @@ describe("streamChat", () => {
       'event: start\ndata: {"type":"start","provider":"fake","model":"stub","conversationId":"conversation-1"}\n\n' +
       'event: delta\ndata: {"type":"delta","text":"Xin"}\n\n' +
       'event: delta\ndata: {"type":"delta","text":" chào"}\n\n' +
-      'event: usage\ndata: {"type":"usage","usage":{"inputTokens":1,"outputTokens":2,"totalTokens":3},"latencyMs":10}\n\n' +
+      'event: usage\ndata: {"type":"usage","usage":{"inputTokens":1,"outputTokens":2,"totalTokens":3},"latencyMs":10,"estimatedCostUsd":0.0002}\n\n' +
       'event: end\ndata: {"type":"end"}\n\n';
 
     globalThis.fetch = async () =>
@@ -47,7 +47,8 @@ describe("streamChat", () => {
       {
         type: "usage",
         usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
-        latencyMs: 10
+        latencyMs: 10,
+        estimatedCostUsd: 0.0002
       },
       { type: "end" }
     ]);
@@ -84,6 +85,7 @@ describe("streamChat", () => {
 
     await streamChat({
       message: "Continue",
+      userId: "demo-user",
       conversationId: "f1447b2b-15c1-465d-ae21-bcd06af72867",
       signal: new AbortController().signal,
       onEvent: () => undefined
@@ -91,6 +93,7 @@ describe("streamChat", () => {
 
     assert.deepEqual(requestBody, {
       message: "Continue",
+      userId: "demo-user",
       conversationId: "f1447b2b-15c1-465d-ae21-bcd06af72867"
     });
   });

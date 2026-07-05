@@ -3,6 +3,7 @@ import { StreamEventParser, type StreamEvent } from "../lib/stream-events";
 interface StreamChatOptions {
   message: string;
   conversationId?: string;
+  userId?: string;
   signal: AbortSignal;
   onEvent(event: StreamEvent): void;
 }
@@ -13,6 +14,7 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       message: options.message,
+      userId: options.userId,
       conversationId: options.conversationId
     }),
     signal: options.signal

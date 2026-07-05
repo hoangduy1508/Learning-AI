@@ -1,6 +1,6 @@
 # AI Learning Backend
 
-Node.js + TypeScript service for Week 1 of the AI Integration learning plan.
+Node.js + TypeScript service for Project 1 of the AI Integration learning plan.
 
 ## Requirements
 
@@ -57,6 +57,24 @@ Select exactly one provider with `LLM_PROVIDER`. Provider credentials remain on 
 To add another provider later, implement `LlmProvider` and register it in
 `src/providers/index.ts`; routes and frontend code do not need to change.
 
+## Production basics
+
+Useful environment knobs for the Project 1 demo:
+
+```dotenv
+LLM_FALLBACK_PROVIDER=none
+CHAT_CACHE_TTL_MS=0
+CHAT_RATE_LIMIT_MAX_REQUESTS=20
+CHAT_RATE_LIMIT_WINDOW_MS=60000
+OPENAI_INPUT_USD_PER_1M_TOKENS=0
+OPENAI_OUTPUT_USD_PER_1M_TOKENS=0
+GEMINI_INPUT_USD_PER_1M_TOKENS=0
+GEMINI_OUTPUT_USD_PER_1M_TOKENS=0
+```
+
+Cost pricing defaults to zero so the code does not bake in stale provider pricing. Fill these
+values from the active provider billing page when you want real estimates.
+
 ## Verify
 
 ```powershell
@@ -86,6 +104,20 @@ output limits, and stop conditions.
 
 `POST /api/chat/stream` returns `text/event-stream` events with the contract documented in
 [Streaming Chat](docs/03_STREAMING_CHAT.md).
+
+## Conversation and telemetry
+
+When `DATABASE_URL` is configured, chat messages are persisted and the UI can show project
+telemetry for `demo-user`.
+
+```powershell
+Invoke-RestMethod `
+  -Method Get `
+  -Uri http://127.0.0.1:8000/api/users/demo-user/cost-summary
+```
+
+See [Conversation Persistence](docs/08_CONVERSATION_PERSISTENCE.md) for schema, context window,
+retry, rate limiting, provider routing, cache, and cost tracking notes.
 
 ## Filesystem tools
 

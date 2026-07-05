@@ -293,7 +293,8 @@ export function buildApp(
             encodeStreamEvent({
               type: "usage",
               usage: event.usage,
-              latencyMs: Math.round(performance.now() - startedAt)
+              latencyMs: Math.round(performance.now() - startedAt),
+              estimatedCostUsd: usdMicrosToUsd(estimatedCostUsdMicros)
             })
           );
         }

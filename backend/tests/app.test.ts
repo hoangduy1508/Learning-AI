@@ -486,7 +486,8 @@ describe("AI Learning API", () => {
       {
         type: "usage",
         usage: { inputTokens: 4, outputTokens: 6, totalTokens: 10 },
-        latencyMs: events[3]?.type === "usage" ? events[3].latencyMs : -1
+        latencyMs: events[3]?.type === "usage" ? events[3].latencyMs : -1,
+        estimatedCostUsd: 0
       },
       { type: "end" }
     ]);

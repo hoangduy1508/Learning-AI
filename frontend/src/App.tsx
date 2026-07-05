@@ -9,6 +9,7 @@ import {
   type PendingAction,
   type ToolAuditEntry
 } from "./api/file-agent";
+import { getCostSummary, type CostSummary } from "./api/cost-summary";
 import { streamChat } from "./api/chat-stream";
 import type { StreamEvent } from "./lib/stream-events";
 import "./styles.css";
@@ -19,12 +20,15 @@ interface UsageView {
   thinkingTokens?: number;
   totalTokens: number;
   latencyMs: number;
+  estimatedCostUsd?: number;
+  cacheHit?: boolean;
 }
 
 type StreamStatus = "idle" | "streaming" | "done" | "error" | "stopped";
 type AgentStatus = "idle" | "loading" | "done" | "error";
 
 export default function App() {
+  const userId = "demo-user";
   const [activeMode, setActiveMode] = useState<"streaming" | "agent">("streaming");
   const [message, setMessage] = useState("Giai thich HTTP streaming trong 2 cau ngan.");
   const [answer, setAnswer] = useState("");
@@ -32,6 +36,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<{ provider: string; model: string } | null>(null);
   const [usage, setUsage] = useState<UsageView | null>(null);
+  const [costSummary, setCostSummary] = useState<CostSummary | null>(null);
+  const [costSummaryError, setCostSummaryError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -48,6 +54,7 @@ export default function App() {
   useEffect(() => {
     void refreshPendingActions();
     void refreshToolAudit();
+    void refreshCostSummary();
   }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -68,6 +75,7 @@ export default function App() {
     try {
       await streamChat({
         message: trimmedMessage,
+        userId,
         conversationId,
         signal: abortController.signal,
         onEvent: handleStreamEvent
@@ -75,6 +83,7 @@ export default function App() {
 
       if (!abortController.signal.aborted) {
         setStatus("done");
+        await refreshCostSummary();
       }
     } catch (streamError) {
       if (abortController.signal.aborted) {
@@ -107,13 +116,26 @@ export default function App() {
         outputTokens: event.usage.outputTokens,
         thinkingTokens: event.usage.thinkingTokens,
         totalTokens: event.usage.totalTokens,
-        latencyMs: event.latencyMs
+        latencyMs: event.latencyMs,
+        estimatedCostUsd: event.estimatedCostUsd
       });
     }
 
     if (event.type === "error") {
       setError(event.message);
       setStatus("error");
+    }
+  }
+
+  async function refreshCostSummary() {
+    setCostSummaryError(null);
+    try {
+      setCostSummary(await getCostSummary(userId));
+    } catch (summaryError) {
+      setCostSummary(null);
+      setCostSummaryError(
+        summaryError instanceof Error ? summaryError.message : "Cannot load cost summary"
+      );
     }
   }
 
@@ -181,11 +203,11 @@ export default function App() {
   return (
     <main className="page">
       <section className="panel">
-        <div className="eyebrow">AI Integration - Week 3</div>
+        <div className="eyebrow">Project 1 - Streaming AI Chat</div>
         <h1>AI Chat Lab</h1>
         <p className="description">
-          Streaming chat for latency practice, plus a file agent UI for tool calling. In auto-apply
-          mode, write/delete tools run immediately inside the configured allowed roots.
+          Streaming chat with persisted conversations, provider telemetry, cost tracking, and a
+          file-agent workspace for tool calling.
         </p>
 
         <div className="tabs" role="tablist" aria-label="AI lab modes">
@@ -217,6 +239,10 @@ export default function App() {
             stopGenerating={stopGenerating}
             usage={usage}
             conversationId={conversationId}
+            costSummary={costSummary}
+            costSummaryError={costSummaryError}
+            onRefreshCostSummary={refreshCostSummary}
+            userId={userId}
           />
         ) : (
           <FileAgentView
@@ -250,6 +276,10 @@ interface StreamingChatViewProps {
   stopGenerating(): void;
   usage: UsageView | null;
   conversationId?: string;
+  costSummary: CostSummary | null;
+  costSummaryError: string | null;
+  onRefreshCostSummary(): Promise<void>;
+  userId: string;
 }
 
 function StreamingChatView(props: StreamingChatViewProps) {
@@ -299,8 +329,36 @@ function StreamingChatView(props: StreamingChatViewProps) {
           <Metric label="Thinking" value={props.usage.thinkingTokens ?? 0} />
           <Metric label="Total" value={props.usage.totalTokens} />
           <Metric label="Latency" value={`${props.usage.latencyMs} ms`} />
+          <Metric label="Cost" value={formatUsd(props.usage.estimatedCostUsd ?? 0)} />
         </section>
       ) : null}
+
+      <section className="telemetry-panel">
+        <div className="pending-header">
+          <div>
+            <h2>Project telemetry</h2>
+            <p className="muted">User: {props.userId}</p>
+          </div>
+          <button type="button" className="secondary-button compact" onClick={props.onRefreshCostSummary}>
+            Refresh
+          </button>
+        </div>
+        {props.costSummary ? (
+          <section className="usage-grid compact-grid">
+            <Metric label="Requests" value={props.costSummary.request_count} />
+            <Metric label="Input" value={props.costSummary.input_tokens} />
+            <Metric label="Output" value={props.costSummary.output_tokens} />
+            <Metric label="Thinking" value={props.costSummary.thinking_tokens} />
+            <Metric label="Total tokens" value={props.costSummary.total_tokens} />
+            <Metric label="Total cost" value={formatUsd(props.costSummary.estimated_cost_usd)} />
+          </section>
+        ) : (
+          <p className="muted">
+            Cost summary appears when the backend runs with conversation persistence enabled.
+          </p>
+        )}
+        {props.costSummaryError ? <p className="warning">{props.costSummaryError}</p> : null}
+      </section>
     </>
   );
 }
@@ -472,4 +530,8 @@ function Metric({ label, value }: { label: number | string; value: number | stri
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatUsd(value: number): string {
+  return `$${value.toFixed(6)}`;
 }

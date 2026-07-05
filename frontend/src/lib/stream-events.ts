@@ -18,6 +18,7 @@ export type StreamEvent =
         totalTokens: number;
       };
       latencyMs: number;
+      estimatedCostUsd?: number;
     }
   | {
       type: "end";

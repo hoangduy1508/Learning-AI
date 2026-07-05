@@ -172,6 +172,10 @@ button:disabled {
   gap: 12px;
 }
 
+.compact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+}
+
 .metric {
   border: 1px solid #d9e2ef;
   border-radius: 16px;
@@ -189,6 +193,23 @@ button:disabled {
   display: block;
   margin-top: 6px;
   font-size: 1.15rem;
+}
+
+.telemetry-panel {
+  margin-top: 18px;
+  border: 1px solid #d9e2ef;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.telemetry-panel h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.telemetry-panel .muted {
+  margin: 4px 0 0;
 }
 
 .agent-layout {

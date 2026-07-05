@@ -15,6 +15,7 @@ export type StreamEvent =
       type: "usage";
       usage: LlmUsage;
       latencyMs: number;
+      estimatedCostUsd?: number;
     }
   | {
       type: "end";
