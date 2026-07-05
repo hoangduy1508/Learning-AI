@@ -1,5 +1,5 @@
 import { createDeterministicEmbedding } from "../embeddings/deterministic.js";
-import { compareChunkingStrategies } from "../ingestion/chunking.js";
+import { compareChunkingStrategies, createParentChildChunks } from "../ingestion/chunking.js";
 import { cleanParsedDocument } from "../ingestion/clean.js";
 import { parseSourceDocument } from "../ingestion/parser.js";
 import { IngestionPipeline } from "../ingestion/pipeline.js";
@@ -38,6 +38,11 @@ const comparisons = compareChunkingStrategies(cleanedPages, parsed.parser, {
   maxCharacters: 120,
   overlapCharacters: 24
 });
+const parentChild = createParentChildChunks(cleanedPages, parsed.parser, {
+  parentMaxCharacters: 260,
+  childMaxCharacters: 96,
+  childOverlapCharacters: 24
+});
 
 const result = await pipeline.ingest(source);
 
@@ -58,6 +63,10 @@ for (const comparison of comparisons) {
       (firstChunk?.metadata.sectionTitle ? ` firstSection=${firstChunk.metadata.sectionTitle}` : "")
   );
 }
+console.log(
+  `- parent-child: parents=${parentChild.parents.length} children=${parentChild.children.length}` +
+    ` firstChildParent=${String(parentChild.children[0]?.metadata.parentSectionTitle ?? "none")}`
+);
 console.log("\nTop matches");
 for (const match of matches) {
   console.log(`- page=${String(match.metadata.page)} distance=${match.distance.toFixed(4)} ${match.content}`);

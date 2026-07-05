@@ -15,13 +15,29 @@ export interface StructureAwareChunkOptions {
   overlapCharacters: number;
 }
 
-export type ChunkingStrategy = "fixed-size" | "recursive-text" | "structure-aware";
+export interface ParentChildChunkOptions {
+  parentMaxCharacters: number;
+  childMaxCharacters: number;
+  childOverlapCharacters: number;
+}
+
+export type ChunkingStrategy =
+  | "fixed-size"
+  | "recursive-text"
+  | "structure-aware"
+  | "parent-child-parent"
+  | "parent-child-child";
 
 export interface ChunkStrategyComparison {
   strategy: ChunkingStrategy;
   chunkCount: number;
   averageCharacters: number;
   chunks: DocumentChunk[];
+}
+
+export interface ParentChildChunkSet {
+  parents: DocumentChunk[];
+  children: DocumentChunk[];
 }
 
 export function chunkCleanedPages(
@@ -116,6 +132,61 @@ export function compareChunkingStrategies(
   }));
 }
 
+export function createParentChildChunks(
+  pages: CleanedPage[],
+  parser: ParsedDocument["parser"],
+  options: ParentChildChunkOptions
+): ParentChildChunkSet {
+  validateChunkOptions({
+    maxCharacters: options.parentMaxCharacters,
+    overlapCharacters: 0
+  });
+  validateChunkOptions({
+    maxCharacters: options.childMaxCharacters,
+    overlapCharacters: options.childOverlapCharacters
+  });
+
+  const parents = chunkStructureAwarePages(pages, parser, {
+    maxCharacters: options.parentMaxCharacters,
+    overlapCharacters: 0
+  }).map((chunk, index) =>
+    createChunk(
+      index,
+      chunk.pageNumber,
+      chunk.content,
+      parser,
+      "parent-child-parent",
+      chunk.metadata.sectionTitle
+    )
+  );
+
+  const children: DocumentChunk[] = [];
+  for (const parent of parents) {
+    for (const content of splitRecursive(parent.content, {
+      maxCharacters: options.childMaxCharacters,
+      overlapCharacters: options.childOverlapCharacters
+    })) {
+      children.push(
+        createChunk(
+          children.length,
+          parent.pageNumber,
+          content,
+          parser,
+          "parent-child-child",
+          parent.metadata.sectionTitle,
+          {
+            parentChunkIndex: parent.chunkIndex,
+            parentSectionTitle: parent.metadata.sectionTitle,
+            childOverlapCharacters: options.childOverlapCharacters
+          }
+        )
+      );
+    }
+  }
+
+  return { parents, children };
+}
+
 function splitRecursive(text: string, options: RecursiveChunkOptions): string[] {
   if (text.length <= options.maxCharacters) {
     return [text];
@@ -207,7 +278,12 @@ function createChunk(
   content: string,
   parser: ParsedDocument["parser"],
   chunking: ChunkingStrategy,
-  sectionTitle?: string
+  sectionTitle?: string,
+  extraMetadata?: {
+    parentChunkIndex?: number;
+    parentSectionTitle?: string;
+    childOverlapCharacters?: number;
+  }
 ): DocumentChunk {
   return {
     chunkIndex,
@@ -218,9 +294,16 @@ function createChunk(
       parser,
       chunking,
       ...(sectionTitle ? { sectionTitle } : {}),
+      ...removeUndefinedValues(extraMetadata ?? {}),
       tokenEstimate: estimateTokens(content)
     }
   };
+}
+
+function removeUndefinedValues<T extends Record<string, unknown>>(record: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== undefined)
+  ) as Partial<T>;
 }
 
 function estimateTokens(text: string): number {

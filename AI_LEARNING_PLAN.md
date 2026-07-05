@@ -222,7 +222,7 @@ Kiến thức:
 
 - [x] Hiểu parse, OCR, clean, chunk, embed và index
 - [x] So sánh fixed-size, recursive và structure-aware chunking
-- [ ] Hiểu chunk overlap và parent-child chunking
+- [x] Hiểu chunk overlap và parent-child chunking
 - [ ] Hiểu tác động của bảng, header, footer và scanned PDF
 - [ ] Hiểu document versioning và re-indexing
 
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: RAG Ingestion Pipeline
 - Current week: Tuần 6
-- Current task: Học chunk overlap và parent-child chunking; thiết kế cách lưu parent section/page để retrieval không mất ngữ cảnh
+- Current task: Học tác động của bảng, header, footer và scanned PDF lên ingestion/chunking
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -960,6 +960,19 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 81 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `So sánh fixed-size, recursive và structure-aware chunking` và task thực hành `Chunk theo cấu trúc tài liệu khi có thể`.
 - Task tiếp theo: học chunk overlap và parent-child chunking, sau đó thiết kế parent section/page metadata để retrieval lấy được ngữ cảnh rộng hơn khi cần.
+
+### 2026-07-05 - Chunk overlap và parent-child chunking
+
+- Mở rộng `DocumentChunk.metadata` với `parentChunkIndex`, `parentSectionTitle` và `childOverlapCharacters`.
+- Thêm `createParentChildChunks()` trong `backend/src/ingestion/chunking.ts`: tạo parent chunk bằng structure-aware chunking, sau đó cắt parent thành child chunk nhỏ hơn có overlap.
+- Parent chunk dùng để giữ ngữ cảnh section/page rộng; child chunk nhỏ hơn dùng cho embedding và vector search.
+- Child chunk lưu metadata để khi match query có thể trace về parent section/page thay vì chỉ dùng đoạn nhỏ thiếu ngữ cảnh.
+- Cập nhật `backend/src/scripts/ingestion-lab.ts` để in `parent-child: parents=... children=... firstChildParent=...`.
+- Cập nhật `backend/docs/10_RAG_INGESTION_PIPELINE.md` với trade-off overlap: giảm mất nghĩa ở ranh giới chunk nhưng tăng số chunk, chi phí embedding và duplicate context.
+- Thêm test kiểm chứng parent-child chunks có child overlap, `parentChunkIndex`, `parentSectionTitle`, `childOverlapCharacters` và parent chunk riêng.
+- Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 82 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `Hiểu chunk overlap và parent-child chunking`.
+- Task tiếp theo: học tác động của bảng, header, footer và scanned PDF lên parse/clean/chunk; thêm bước clean hoặc parser metadata để phát hiện nhiễu tài liệu.
 
 ## Session Notes Template
 

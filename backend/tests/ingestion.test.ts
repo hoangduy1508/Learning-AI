@@ -6,7 +6,8 @@ import {
   chunkCleanedPages,
   chunkFixedSizePages,
   chunkStructureAwarePages,
-  compareChunkingStrategies
+  compareChunkingStrategies,
+  createParentChildChunks
 } from "../src/ingestion/chunking.js";
 import { cleanText } from "../src/ingestion/clean.js";
 import { parseSourceDocument } from "../src/ingestion/parser.js";
@@ -96,6 +97,38 @@ describe("ingestion pipeline", () => {
       ["fixed-size", "recursive-text", "structure-aware"]
     );
     assert.ok(comparison.every((entry) => entry.chunkCount > 0));
+  });
+
+  it("creates parent-child chunks with child overlap and parent metadata", () => {
+    const pages = [
+      {
+        pageNumber: 2,
+        originalLength: 220,
+        text: [
+          "# Security",
+          "Tenant filters must run before vector ranking.",
+          "Audit logs record retrieval and tool activity.",
+          "Prompt injection text from documents stays untrusted."
+        ].join("\n")
+      }
+    ];
+
+    const result = createParentChildChunks(pages, "plain-text", {
+      parentMaxCharacters: 220,
+      childMaxCharacters: 72,
+      childOverlapCharacters: 24
+    });
+
+    assert.equal(result.parents.length, 1);
+    assert.ok(result.children.length > 1);
+    assert.ok(result.children.every((chunk) => chunk.metadata.chunking === "parent-child-child"));
+    assert.ok(result.children.every((chunk) => chunk.metadata.parentChunkIndex === 0));
+    assert.ok(result.children.every((chunk) => chunk.metadata.parentSectionTitle === "Security"));
+    assert.ok(result.children.every((chunk) => chunk.metadata.childOverlapCharacters === 24));
+    assert.equal(result.parents[0]?.metadata.chunking, "parent-child-parent");
+
+    const firstChildTail = result.children[0]!.content.slice(-16);
+    assert.ok(result.children[1]!.content.includes(firstChildTail));
   });
 
   it("parses, cleans, chunks, embeds, and indexes a document", async () => {

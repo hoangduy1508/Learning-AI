@@ -95,6 +95,32 @@ Trade-off quan trong:
 - Structure-aware tot khi parser giu duoc heading/list/table; neu parser lam mat cau truc thi phai fallback
   ve recursive/fixed-size.
 
+## Overlap va parent-child chunking
+
+Overlap copy mot phan cuoi cua chunk truoc sang chunk sau. Loi ich la query van co the match khi y quan trong
+nam ngay bien chunk. Cai gia phai tra la:
+
+- Nhieu chunk hon.
+- Nhieu embedding hon.
+- Retrieved context de bi lap lai noi dung.
+
+Parent-child chunking giai quyet mot trade-off khac:
+
+- Parent chunk lon hon, thuong la page hoac section, de giu ngu canh doc hieu.
+- Child chunk nho hon, co overlap, duoc embed va dung de vector search.
+- Khi child chunk match query, metadata `parentChunkIndex` va `parentSectionTitle` cho phep he thong lay parent
+  context rong hon de tao cau tra loi.
+
+Trong lab, `createParentChildChunks()` tao parent bang structure-aware chunking, sau do cat parent thanh child
+chunk nho hon. Child chunk luu metadata:
+
+- `parentChunkIndex`: parent trong cung document/page.
+- `parentSectionTitle`: heading cua section neu co.
+- `childOverlapCharacters`: overlap da dung khi cat child.
+
+Production thuong khong nen dua toan bo parent vao moi metadata row neu parent qua lon. Tot hon la luu parent
+chunk rieng trong database va de child row chi reference parent id/index.
+
 ## Embed va index
 
 Lab dung `createDeterministicEmbedding()` de chay offline. Production se thay bang embedding provider that,
@@ -115,8 +141,8 @@ npm run learn:ingestion
 ```
 
 Lab se ingest mot tai lieu PDF text-pages mo phong, sau do query top-k tu in-memory vector repository va
-in page number cua cac match. Lab cung in so chunk trung binh cua `fixed-size`, `recursive-text` va
-`structure-aware` de thay trade-off.
+in page number cua cac match. Lab cung in so chunk trung binh cua `fixed-size`, `recursive-text`,
+`structure-aware` va so parent/child chunk de thay trade-off.
 
 ## Gioi han hien tai
 
