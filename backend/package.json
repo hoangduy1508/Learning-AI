@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "learn:tokens": "tsx src/scripts/token-lab.ts",
     "learn:generation": "tsx src/scripts/generation-lab.ts",
+    "learn:retrieval": "tsx src/scripts/retrieval-comparison-lab.ts",
     "smoke:conversation-db": "tsx src/scripts/conversation-db-smoke.ts",
     "smoke:pgvector": "tsx src/scripts/pgvector-smoke.ts",
     "reference:azure-foundry-agent": "tsx src/scripts/azure-foundry-file-agent-reference.ts",

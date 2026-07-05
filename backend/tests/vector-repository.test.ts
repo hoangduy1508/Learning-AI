@@ -6,6 +6,7 @@ import {
   InMemoryVectorRepository,
   PostgresVectorRepository
 } from "../src/vector/repository.js";
+import { compareRetrievalQueries, retrievalLabQueries } from "../src/vector/retrieval-lab.js";
 
 describe("vector repository", () => {
   it("stores embeddings with metadata and returns nearest chunks first", async () => {
@@ -145,5 +146,18 @@ describe("vector repository", () => {
     assert.match(calls[0]!.sql, /AND owner_user_id = \$3/);
     assert.match(calls[0]!.sql, /metadata ->> \$5 = \$6/);
     assert.deepEqual(calls[0]!.values, ["[1,0,0,0]", "tenant_a", "user_a", 3, "topic", "vector"]);
+  });
+
+  it("compares retrieval results across different queries", async () => {
+    const results = await compareRetrievalQueries(retrievalLabQueries, 2);
+
+    assert.deepEqual(
+      results.map((result) => result.matches[0]?.metadata.topic),
+      ["vector", "backend", "frontend", "security"]
+    );
+    assert.ok(results.every((result) => result.matches.length === 2));
+    assert.ok(
+      results.every((result) => result.matches[0]!.distance <= result.matches[1]!.distance)
+    );
   });
 });

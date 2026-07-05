@@ -76,6 +76,27 @@ Metadata filter được áp dụng cùng với tenant/user filter trước khi 
 điểm security quan trọng: model không được nhìn thấy chunk ngoài quyền user rồi mới tự quyết định bỏ
 qua.
 
+## So sánh kết quả với nhiều query
+
+Chạy lab offline không cần PostgreSQL:
+
+```powershell
+cd backend
+npm run learn:retrieval
+```
+
+Lab này seed bốn chunk về `vector`, `backend`, `frontend` và `security`, sau đó chạy nhiều query để
+so sánh top-k. Mục tiêu là quan sát ba điều:
+
+- Query khác nhau tạo query embedding khác nhau, nên thứ tự top-k thay đổi.
+- Distance nhỏ hơn nghĩa là vector gần hơn, nhưng không tự động đảm bảo câu trả lời đúng.
+- Embedding dimension quá nhỏ hoặc embedding model kém có thể làm collision, khiến kết quả gần nhất
+  không đúng nghĩa nhất.
+
+Trong smoke pgvector hiện tại, schema dùng `vector(4)` để lab nhỏ và dễ thấy lỗi dimension mismatch.
+Trong lab so sánh offline, code dùng dimension lớn hơn để giảm collision và làm ranking dễ quan sát
+hơn. Production phải dùng đúng dimension của embedding provider đã chọn.
+
 ## Chạy PostgreSQL + pgvector
 
 Root `docker-compose.yml` dùng image:

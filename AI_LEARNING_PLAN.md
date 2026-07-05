@@ -208,7 +208,7 @@ Thực hành:
 - [x] Tạo bảng document và document chunk
 - [x] Lưu embedding kèm metadata
 - [x] Truy vấn top-k bằng cosine distance
-- [ ] So sánh kết quả với các query khác nhau
+- [x] So sánh kết quả với các query khác nhau
 - [ ] Thử HNSW index và xem query plan
 
 Definition of Done:
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: Embedding và Vector Search
 - Current week: Tuần 5
-- Current task: So sánh kết quả với các query khác nhau, sau đó chạy smoke pgvector/HNSW query plan khi có Docker hoặc PostgreSQL runtime thật
+- Current task: Chạy smoke pgvector và thử HNSW index/query plan khi có Docker hoặc PostgreSQL runtime thật
 - Blockers: Docker không có trong Windows PATH và WSL hiện báo không có distro; In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -908,6 +908,17 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm test` có 74 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `Hiểu exact và approximate nearest-neighbor search`, `Hiểu HNSW và IVFFlat ở mức sử dụng`, `Hiểu metadata filtering`, `Lưu embedding kèm metadata` và `Truy vấn top-k bằng cosine distance`.
 - Task tiếp theo: so sánh kết quả retrieval với các query khác nhau; khi có Docker/PostgreSQL runtime thật thì chạy `npm run smoke:pgvector` và `EXPLAIN` để xem HNSW query plan.
+
+### 2026-07-05 - So sánh retrieval với nhiều query
+
+- Thêm `backend/src/vector/retrieval-lab.ts` để seed bốn chunk chủ đề `vector`, `backend`, `frontend` và `security`, rồi chạy nhiều query top-k trên `InMemoryVectorRepository`.
+- Thêm script `npm run learn:retrieval` qua `backend/src/scripts/retrieval-comparison-lab.ts` để in query, topic, distance và content của từng match.
+- Chạy lab ban đầu với embedding deterministic 4 chiều cho thấy collision làm ranking sai nghĩa ở một số query; tăng dimension riêng cho lab offline lên 32 để giảm collision và quan sát ranking rõ hơn.
+- Cập nhật `backend/docs/09_EMBEDDINGS_AND_PGVECTOR.md` với lệnh lab, ý nghĩa distance, cảnh báo nearest vector không đảm bảo đúng nhất và ghi chú production phải dùng đúng dimension của provider.
+- Thêm test kiểm chứng mỗi query lab trả top topic tương ứng và kết quả được sort theo distance tăng dần.
+- Kiểm chứng: `npm run learn:retrieval` chạy thành công; `npm run typecheck` thành công; `npm test` có 75 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `So sánh kết quả với các query khác nhau`.
+- Task tiếp theo: khi có Docker/PostgreSQL runtime thật, chạy `npm run smoke:pgvector` và thêm `EXPLAIN` để xem HNSW query plan.
 
 ## Session Notes Template
 
