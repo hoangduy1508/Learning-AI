@@ -5,15 +5,18 @@ import { cleanParsedDocument } from "../ingestion/clean.js";
 import { parseSourceDocument } from "../ingestion/parser.js";
 import { IngestionPipeline } from "../ingestion/pipeline.js";
 import type { SourceDocument } from "../ingestion/types.js";
+import { InMemoryIngestionVersionStore } from "../ingestion/versioning.js";
 import { InMemoryVectorRepository } from "../vector/repository.js";
 
 const repository = new InMemoryVectorRepository();
+const versionStore = new InMemoryIngestionVersionStore();
 const pipeline = new IngestionPipeline(repository, {
   embeddingDimension: 32,
   chunking: {
     maxCharacters: 220,
     overlapCharacters: 40
-  }
+  },
+  versionStore
 });
 
 const source: SourceDocument = {
@@ -53,6 +56,11 @@ const parentChild = createParentChildChunks(cleanedPages, parsed.parser, {
 });
 
 const result = await pipeline.ingest(source);
+const duplicateResult = await pipeline.ingest(source);
+const changedResult = await pipeline.ingest({
+  ...source,
+  content: `${source.content}\n\nRe-indexing creates a new version when the checksum changes.`
+});
 
 const matches = await repository.searchTopK({
   tenantId: "tenant_demo",
@@ -63,6 +71,10 @@ const matches = await repository.searchTopK({
 
 console.log("Ingestion result");
 console.log(JSON.stringify(result, null, 2));
+console.log("\nRe-upload result");
+console.log(JSON.stringify(duplicateResult, null, 2));
+console.log("\nChanged document result");
+console.log(JSON.stringify(changedResult, null, 2));
 console.log("\nDocument artifact report");
 console.log(JSON.stringify(artifactReport, null, 2));
 console.log("\nChunking strategy comparison");

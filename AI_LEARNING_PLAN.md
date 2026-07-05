@@ -224,7 +224,7 @@ Kiến thức:
 - [x] So sánh fixed-size, recursive và structure-aware chunking
 - [x] Hiểu chunk overlap và parent-child chunking
 - [x] Hiểu tác động của bảng, header, footer và scanned PDF
-- [ ] Hiểu document versioning và re-indexing
+- [x] Hiểu document versioning và re-indexing
 
 Thực hành:
 
@@ -232,7 +232,7 @@ Thực hành:
 - [ ] Parse PDF và giữ page number
 - [x] Chunk theo cấu trúc tài liệu khi có thể
 - [ ] Batch embedding
-- [ ] Lưu checksum để tránh xử lý trùng
+- [x] Lưu checksum để tránh xử lý trùng
 - [ ] Thêm trạng thái ingestion và error recovery
 
 Definition of Done:
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: RAG Ingestion Pipeline
 - Current week: Tuần 6
-- Current task: Học document versioning và re-indexing; thiết kế checksum/version để tránh xử lý trùng
+- Current task: Upload và kiểm tra loại/kích thước file cho ingestion endpoint
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -986,6 +986,20 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 84 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `Hiểu tác động của bảng, header, footer và scanned PDF`.
 - Task tiếp theo: học document versioning và re-indexing; thiết kế checksum/version để tránh xử lý trùng và chuẩn bị cho re-upload cùng file.
+
+### 2026-07-05 - Document versioning, re-indexing và checksum
+
+- Thêm `backend/src/ingestion/versioning.ts` với `createDocumentChecksum()`, `buildIngestionDocumentKey()` và `InMemoryIngestionVersionStore`.
+- Checksum hiện dùng SHA-256 từ `mimeType` và `content`, giúp nhận diện cùng file/nội dung trong lab offline.
+- Mở rộng `IngestionPipeline` để nhận optional `versionStore`: cùng document key và checksum thì trả `status: skipped_duplicate`, không tạo document/chunk mới.
+- Khi cùng document key nhưng checksum đổi, pipeline tăng `version`, index chunk mới và lưu metadata `checksum`, `version`, `sourceUri` vào chunk.
+- Cập nhật `IngestionResult` với `checksum`, `version` và `status`.
+- Cập nhật `backend/src/scripts/ingestion-lab.ts` để in ba trường hợp: ingest lần đầu, re-upload cùng nội dung bị skip, nội dung đổi tạo version mới.
+- Cập nhật `backend/docs/10_RAG_INGESTION_PIPELINE.md` với phần Document Versioning Và Re-indexing bằng tiếng Việt có dấu.
+- Thêm test kiểm chứng re-upload cùng checksum không tạo chunk mới, nội dung đổi tạo version 2 và retrieval có thể filter metadata `version`.
+- Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 85 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `Hiểu document versioning và re-indexing` và task thực hành `Lưu checksum để tránh xử lý trùng`.
+- Task tiếp theo: thêm upload/validation layer cho ingestion endpoint, kiểm tra loại file và kích thước file trước khi parse.
 
 ## Session Notes Template
 

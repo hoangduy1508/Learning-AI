@@ -49,4 +49,7 @@ export interface IngestionResult {
   chunkIds: string[];
   pageCount: number;
   chunkCount: number;
+  checksum: string;
+  version: number;
+  status: "indexed" | "skipped_duplicate";
 }

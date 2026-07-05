@@ -153,6 +153,30 @@ nhưng repository contract không đổi:
 Đây là nền tảng cho citation về sau: câu trả lời RAG chỉ nên trích dẫn document/page nằm trong retrieved
 context, không để model tự tạo citation.
 
+## Document Versioning Và Re-indexing
+
+`IngestionPipeline` có thể nhận `versionStore` để quản lý checksum/version:
+
+- `createDocumentChecksum()` tạo SHA-256 từ `mimeType` và `content`.
+- `buildIngestionDocumentKey()` định danh tài liệu theo tenant, owner và `sourceUri`.
+- Nếu cùng document key và cùng checksum đã tồn tại, pipeline trả `status: "skipped_duplicate"` và không tạo
+  document/chunk mới.
+- Nếu cùng document key nhưng checksum đổi, pipeline tạo version mới, ví dụ `version: 2`, rồi index chunk mới.
+
+Trong lab, chunk metadata có thêm:
+
+- `checksum`: checksum của nội dung đã ingest.
+- `version`: version của tài liệu.
+- `sourceUri`: document key dùng để nhận diện cùng một tài liệu qua các lần upload.
+
+Trade-off production:
+
+- Không nên xóa version cũ ngay khi re-index, vì user có thể đang xem citation từ version cũ.
+- Nên có trạng thái version như `active`, `superseded`, `failed` để retrieval chỉ lấy version active.
+- Re-index nên chạy trong background job; nếu version mới fail giữa chừng thì version cũ vẫn phục vụ được.
+- Checksum nên tính trên nội dung đã chuẩn hóa hoặc file bytes gốc tùy mục tiêu: phát hiện file trùng tuyệt đối
+  hay phát hiện nội dung text trùng sau parse.
+
 ## Chạy Lab
 
 ```powershell
@@ -162,12 +186,13 @@ npm run learn:ingestion
 
 Lab sẽ ingest một tài liệu PDF text-pages mô phỏng, sau đó query top-k từ in-memory vector repository và
 in page number của các match. Lab cũng in báo cáo artifact, số chunk trung bình của `fixed-size`,
-`recursive-text`, `structure-aware` và số parent/child chunk để thấy trade-off.
+`recursive-text`, `structure-aware`, số parent/child chunk và kết quả re-upload cùng checksum để thấy trade-off.
 
 ## Giới Hạn Hiện Tại
 
 - Chưa có upload endpoint và file size/type validation.
 - Chưa parse PDF nhị phân thật.
 - Chưa có OCR cho scanned PDF.
-- Chưa có checksum/document versioning để tránh xử lý trùng.
+- Checksum/versioning hiện mới là in-memory lab; production cần bảng version và unique constraint theo
+  tenant/owner/source/checksum.
 - Chưa có ingestion job status và error recovery.

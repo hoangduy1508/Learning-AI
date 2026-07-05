@@ -13,6 +13,7 @@ import {
 import { cleanParsedDocument, cleanText } from "../src/ingestion/clean.js";
 import { parseSourceDocument } from "../src/ingestion/parser.js";
 import { IngestionPipeline } from "../src/ingestion/pipeline.js";
+import { InMemoryIngestionVersionStore } from "../src/ingestion/versioning.js";
 import { InMemoryVectorRepository } from "../src/vector/repository.js";
 
 describe("ingestion pipeline", () => {
@@ -207,5 +208,51 @@ describe("ingestion pipeline", () => {
 
     assert.equal(matches.length, 2);
     assert.ok(matches.every((match) => typeof match.metadata.page === "number"));
+  });
+
+  it("uses checksum and versioning to skip duplicate re-upload and index changed content", async () => {
+    const repository = new InMemoryVectorRepository();
+    const versionStore = new InMemoryIngestionVersionStore();
+    const pipeline = new IngestionPipeline(repository, {
+      embeddingDimension: 32,
+      chunking: { maxCharacters: 160, overlapCharacters: 20 },
+      versionStore
+    });
+    const source = {
+      tenantId: "tenant_a",
+      ownerUserId: "user_a",
+      title: "Versioned guide",
+      sourceUri: "memory://guide.pdf",
+      mimeType: "application/pdf" as const,
+      content: "Initial retrieval policy."
+    };
+
+    const first = await pipeline.ingest(source);
+    const duplicate = await pipeline.ingest(source);
+    const changed = await pipeline.ingest({
+      ...source,
+      content: "Updated retrieval policy with re-indexing notes."
+    });
+
+    assert.equal(first.status, "indexed");
+    assert.equal(first.version, 1);
+    assert.equal(duplicate.status, "skipped_duplicate");
+    assert.equal(duplicate.version, 1);
+    assert.equal(duplicate.chunkCount, 0);
+    assert.equal(changed.status, "indexed");
+    assert.equal(changed.version, 2);
+    assert.notEqual(changed.checksum, first.checksum);
+
+    const matches = await repository.searchTopK({
+      tenantId: "tenant_a",
+      ownerUserId: "user_a",
+      embedding: createDeterministicEmbedding("updated re-indexing notes", 32),
+      topK: 5,
+      metadata: { version: 2 }
+    });
+
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0]?.metadata.version, 2);
+    assert.equal(matches[0]?.metadata.sourceUri, "memory://guide.pdf");
   });
 });
