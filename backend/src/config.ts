@@ -24,6 +24,7 @@ const environmentSchema = z
     CHAT_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(20),
     CHAT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
     CHAT_CACHE_TTL_MS: z.coerce.number().int().min(0).default(0),
+    INGESTION_MAX_FILE_BYTES: z.coerce.number().int().positive().default(1_000_000),
     OPENAI_INPUT_USD_PER_1M_TOKENS: z.coerce.number().min(0).default(0),
     OPENAI_OUTPUT_USD_PER_1M_TOKENS: z.coerce.number().min(0).default(0),
     OPENAI_THINKING_USD_PER_1M_TOKENS: z.coerce.number().min(0).default(0),

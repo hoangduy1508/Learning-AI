@@ -468,6 +468,107 @@ describe("AI Learning API", () => {
     assert.equal(response.json().estimated_cost_usd, 0);
   });
 
+  it("uploads and ingests a supported document", async () => {
+    const app = createApp(stubProvider);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ingestion/upload",
+      payload: {
+        tenantId: "tenant_a",
+        ownerUserId: "user_a",
+        title: "Upload guide",
+        sourceUri: "memory://upload-guide.txt",
+        fileName: "upload-guide.txt",
+        mimeType: "text/plain",
+        content: "Upload validation happens before ingestion."
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.file_name, "upload-guide.txt");
+    assert.equal(body.mime_type, "text/plain");
+    assert.equal(body.status, "indexed");
+    assert.equal(body.version, 1);
+    assert.equal(body.chunk_count, 1);
+    assert.equal(typeof body.checksum, "string");
+  });
+
+  it("rejects unsupported ingestion upload MIME types", async () => {
+    const response = await createApp(stubProvider).inject({
+      method: "POST",
+      url: "/api/ingestion/upload",
+      payload: {
+        tenantId: "tenant_a",
+        ownerUserId: "user_a",
+        title: "Bad file",
+        sourceUri: "memory://bad.exe",
+        fileName: "bad.exe",
+        mimeType: "application/octet-stream",
+        content: "binary"
+      }
+    });
+
+    assert.equal(response.statusCode, 422);
+    assert.match(response.json().errors.mimeType[0], /Invalid enum value/);
+  });
+
+  it("rejects ingestion uploads over the configured byte limit", async () => {
+    const app = buildApp(
+      stubProvider,
+      loadConfig({ LLM_PROVIDER: "fake", INGESTION_MAX_FILE_BYTES: "10" })
+    );
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ingestion/upload",
+      payload: {
+        tenantId: "tenant_a",
+        ownerUserId: "user_a",
+        title: "Too large",
+        sourceUri: "memory://too-large.txt",
+        fileName: "too-large.txt",
+        mimeType: "text/plain",
+        content: "This content is longer than ten bytes."
+      }
+    });
+
+    assert.equal(response.statusCode, 422);
+    assert.match(response.json().errors.content[0], /File is too large/);
+  });
+
+  it("skips duplicate ingestion uploads with the same checksum", async () => {
+    const app = createApp(stubProvider);
+    const payload = {
+      tenantId: "tenant_a",
+      ownerUserId: "user_a",
+      title: "Duplicate guide",
+      sourceUri: "memory://duplicate-guide.txt",
+      fileName: "duplicate-guide.txt",
+      mimeType: "text/plain",
+      content: "Do not index this twice."
+    };
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/ingestion/upload",
+      payload
+    });
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/ingestion/upload",
+      payload
+    });
+
+    assert.equal(first.statusCode, 200);
+    assert.equal(second.statusCode, 200);
+    assert.equal(first.json().status, "indexed");
+    assert.equal(second.json().status, "skipped_duplicate");
+    assert.equal(second.json().chunk_count, 0);
+    assert.equal(second.json().document_id, first.json().document_id);
+  });
+
   it("streams chat events", async () => {
     const response = await createApp(stubProvider).inject({
       method: "POST",

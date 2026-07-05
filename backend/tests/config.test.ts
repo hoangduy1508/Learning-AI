@@ -77,6 +77,12 @@ describe("multi-provider configuration", () => {
     assert.equal(config.CHAT_RATE_LIMIT_WINDOW_MS, 30_000);
   });
 
+  it("parses ingestion upload limit configuration", () => {
+    const config = loadConfig({ INGESTION_MAX_FILE_BYTES: "2048" });
+
+    assert.equal(config.INGESTION_MAX_FILE_BYTES, 2_048);
+  });
+
   it("wraps the primary provider when fallback or cache is configured", () => {
     assert.ok(
       createLlmProvider(

@@ -11,6 +11,9 @@ import {
 import type { AppConfig } from "./config.js";
 import type { ConversationRepository } from "./conversations/repository.js";
 import { registerFileRoutes } from "./filesystem/routes.js";
+import { IngestionPipeline } from "./ingestion/pipeline.js";
+import { validateIngestionUpload } from "./ingestion/upload.js";
+import { InMemoryIngestionVersionStore } from "./ingestion/versioning.js";
 import { defaultRetryPolicy, retryLlmProviderCall, type RetryPolicy } from "./providers/retry.js";
 import type { LlmProvider } from "./providers/types.js";
 import { LlmProviderError } from "./providers/types.js";
@@ -21,6 +24,7 @@ import {
   validateSupportTicketRequest
 } from "./structured/support-ticket.js";
 import { encodeStreamEvent } from "./streaming/events.js";
+import { InMemoryVectorRepository } from "./vector/repository.js";
 
 const chatRequestSchema = z.object({
   message: z.string().min(1).max(10_000),
@@ -38,6 +42,7 @@ interface BuildAppOptions {
   rateLimitPolicy?: RateLimitPolicy;
   retryPolicy?: RetryPolicy;
   retrySleep?: (delayMs: number) => Promise<void>;
+  ingestionPipeline?: IngestionPipeline;
 }
 
 export function buildApp(
@@ -68,6 +73,14 @@ export function buildApp(
           jitterRatio: config.LLM_RETRY_JITTER_RATIO
         }
       : defaultRetryPolicy);
+  const ingestionPipeline =
+    options.ingestionPipeline ??
+    new IngestionPipeline(new InMemoryVectorRepository(), {
+      embeddingDimension: 32,
+      chunking: { maxCharacters: 1_000, overlapCharacters: 120 },
+      versionStore: new InMemoryIngestionVersionStore()
+    });
+  const ingestionMaxFileBytes = config?.INGESTION_MAX_FILE_BYTES ?? 1_000_000;
 
   app.get("/health", async () => ({ status: "ok" }));
   if (config) {
@@ -76,6 +89,35 @@ export function buildApp(
       registerAgentRoutes(app, config);
     }
   }
+
+  app.post("/api/ingestion/upload", async (request, reply) => {
+    try {
+      const upload = validateIngestionUpload(request.body, {
+        maxFileBytes: ingestionMaxFileBytes
+      });
+      const result = await ingestionPipeline.ingest(upload.source);
+
+      return {
+        file_name: upload.fileName,
+        mime_type: upload.source.mimeType,
+        size_bytes: upload.sizeBytes,
+        document_id: result.documentId,
+        chunk_count: result.chunkCount,
+        page_count: result.pageCount,
+        checksum: result.checksum,
+        version: result.version,
+        status: result.status
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(422).send({
+          detail: "Invalid upload",
+          errors: error.flatten().fieldErrors
+        });
+      }
+      throw error;
+    }
+  });
 
   app.post("/api/chat", async (request, reply) => {
     const parsedRequest = chatRequestSchema.safeParse(request.body);

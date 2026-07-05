@@ -188,9 +188,41 @@ Lab sẽ ingest một tài liệu PDF text-pages mô phỏng, sau đó query top
 in page number của các match. Lab cũng in báo cáo artifact, số chunk trung bình của `fixed-size`,
 `recursive-text`, `structure-aware`, số parent/child chunk và kết quả re-upload cùng checksum để thấy trade-off.
 
+## Upload Và Kiểm Tra File
+
+Backend có endpoint lab:
+
+```text
+POST /api/ingestion/upload
+```
+
+Payload hiện là JSON để học validation trước khi thêm multipart upload thật:
+
+```json
+{
+  "tenantId": "tenant_a",
+  "ownerUserId": "user_a",
+  "title": "Upload guide",
+  "sourceUri": "memory://upload-guide.txt",
+  "fileName": "upload-guide.txt",
+  "mimeType": "text/plain",
+  "content": "Text cần ingest"
+}
+```
+
+Endpoint kiểm tra:
+
+- `mimeType` chỉ cho phép `text/plain` và `application/pdf`.
+- `content` không được rỗng.
+- Kích thước tính bằng byte UTF-8 không được vượt `INGESTION_MAX_FILE_BYTES`.
+- Sau khi hợp lệ, request được chuyển thành `SourceDocument` và đưa vào `IngestionPipeline`.
+
+Giới hạn này là cố ý cho lab: multipart thật sẽ cần thêm parser upload, kiểm tra file name/path an toàn,
+content-type do client gửi không được tin tuyệt đối, và có thể cần sniff magic bytes với PDF thật.
+
 ## Giới Hạn Hiện Tại
 
-- Chưa có upload endpoint và file size/type validation.
+- Upload endpoint hiện dùng JSON lab, chưa phải multipart upload thật.
 - Chưa parse PDF nhị phân thật.
 - Chưa có OCR cho scanned PDF.
 - Checksum/versioning hiện mới là in-memory lab; production cần bảng version và unique constraint theo

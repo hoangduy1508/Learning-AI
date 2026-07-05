@@ -228,7 +228,7 @@ Kiến thức:
 
 Thực hành:
 
-- [ ] Upload và kiểm tra loại/kích thước file
+- [x] Upload và kiểm tra loại/kích thước file
 - [ ] Parse PDF và giữ page number
 - [x] Chunk theo cấu trúc tài liệu khi có thể
 - [ ] Batch embedding
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: RAG Ingestion Pipeline
 - Current week: Tuần 6
-- Current task: Upload và kiểm tra loại/kích thước file cho ingestion endpoint
+- Current task: Parse PDF thật và giữ page number trong ingestion pipeline
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -1000,6 +1000,20 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 85 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `Hiểu document versioning và re-indexing` và task thực hành `Lưu checksum để tránh xử lý trùng`.
 - Task tiếp theo: thêm upload/validation layer cho ingestion endpoint, kiểm tra loại file và kích thước file trước khi parse.
+
+### 2026-07-05 - Upload endpoint và kiểm tra loại/kích thước file
+
+- Thêm cấu hình `INGESTION_MAX_FILE_BYTES` vào `backend/src/config.ts` và `.env.example`; mặc định 1.000.000 byte.
+- Thêm `backend/src/ingestion/upload.ts` để validate payload upload JSON lab trước khi chuyển thành `SourceDocument`.
+- Endpoint upload hiện hỗ trợ `text/plain` và `application/pdf`, reject MIME type khác bằng `422`.
+- Kiểm tra kích thước bằng `Buffer.byteLength(content, "utf8")`; nếu vượt `INGESTION_MAX_FILE_BYTES` thì reject trước khi parse/chunk/embed.
+- Thêm `POST /api/ingestion/upload` trong `backend/src/app.ts`; endpoint gọi `IngestionPipeline` và trả `document_id`, `chunk_count`, `page_count`, `checksum`, `version`, `status`.
+- Dùng `InMemoryVectorRepository` và `InMemoryIngestionVersionStore` làm default lab pipeline cho endpoint khi chưa inject pipeline riêng.
+- Cập nhật `backend/docs/10_RAG_INGESTION_PIPELINE.md` với phần Upload Và Kiểm Tra File bằng tiếng Việt có dấu, ghi rõ đây là JSON lab chứ chưa phải multipart upload thật.
+- Thêm tests cho upload hợp lệ, MIME type không hỗ trợ, vượt giới hạn byte, duplicate checksum bị `skipped_duplicate`, và parse config `INGESTION_MAX_FILE_BYTES`.
+- Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 90 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `Upload và kiểm tra loại/kích thước file`.
+- Task tiếp theo: parse PDF thật và giữ page number; nếu cần dependency parse PDF, cài thêm thư viện phù hợp rồi thay parser mô phỏng `---page---`.
 
 ## Session Notes Template
 
