@@ -15,6 +15,7 @@ const environmentSchema = z
     HOST: z.string().default("127.0.0.1"),
     PORT: z.coerce.number().int().positive().default(8000),
     LLM_PROVIDER: z.enum(["fake", "openai", "gemini"]).default("fake"),
+    LLM_FALLBACK_PROVIDER: z.enum(["none", "fake", "openai", "gemini"]).default("none"),
     LLM_TIMEOUT_SECONDS: z.coerce.number().positive().default(30),
     LLM_RETRY_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(3),
     LLM_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(0).default(250),
@@ -22,6 +23,7 @@ const environmentSchema = z
     LLM_RETRY_JITTER_RATIO: z.coerce.number().min(0).max(1).default(0.2),
     CHAT_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(20),
     CHAT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+    CHAT_CACHE_TTL_MS: z.coerce.number().int().min(0).default(0),
     FILE_TOOL_ALLOWED_ROOTS: z.string().default(""),
     FILE_TOOL_ALLOW_WRITE: booleanEnvironmentValue.default(false),
     FILE_TOOL_ALLOW_DELETE: booleanEnvironmentValue.default(false),
@@ -48,6 +50,20 @@ const environmentSchema = z
         code: z.ZodIssueCode.custom,
         path: ["GEMINI_API_KEY"],
         message: "GEMINI_API_KEY is required when LLM_PROVIDER=gemini"
+      });
+    }
+    if (environment.LLM_FALLBACK_PROVIDER === "openai" && !environment.OPENAI_API_KEY) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["OPENAI_API_KEY"],
+        message: "OPENAI_API_KEY is required when LLM_FALLBACK_PROVIDER=openai"
+      });
+    }
+    if (environment.LLM_FALLBACK_PROVIDER === "gemini" && !environment.GEMINI_API_KEY) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["GEMINI_API_KEY"],
+        message: "GEMINI_API_KEY is required when LLM_FALLBACK_PROVIDER=gemini"
       });
     }
   });

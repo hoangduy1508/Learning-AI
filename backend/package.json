@@ -12,7 +12,7 @@
     "smoke:conversation-db": "tsx src/scripts/conversation-db-smoke.ts",
     "reference:azure-foundry-agent": "tsx src/scripts/azure-foundry-file-agent-reference.ts",
     "typecheck": "tsc -p tsconfig.test.json",
-    "test": "node --import tsx --test tests/app.test.ts tests/config.test.ts tests/streaming.test.ts tests/filesystem.test.ts tests/agent.test.ts tests/structured.test.ts tests/conversation-postgres.test.ts tests/conversation-context.test.ts tests/retry.test.ts tests/rate-limit.test.ts"
+    "test": "node --import tsx --test tests/app.test.ts tests/config.test.ts tests/streaming.test.ts tests/filesystem.test.ts tests/agent.test.ts tests/structured.test.ts tests/conversation-postgres.test.ts tests/conversation-context.test.ts tests/retry.test.ts tests/rate-limit.test.ts tests/provider-routing.test.ts"
   },
   "engines": {
     "node": ">=20"

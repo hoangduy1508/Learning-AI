@@ -175,7 +175,7 @@ Kiến thức:
 - [x] Hiểu sliding window, truncation, summarization và compaction
 - [x] Hiểu retry với exponential backoff và jitter
 - [x] Hiểu rate limiting
-- [ ] Hiểu model routing, fallback và caching
+- [x] Hiểu model routing, fallback và caching
 
 Thực hành:
 
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: Conversation và Production Basics
 - Current week: Tuần 4
-- Current task: Học model routing, fallback và caching
+- Current task: Theo dõi cost theo request và user
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -837,6 +837,20 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm test` có 56 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `Hiểu rate limiting` và `Thêm rate limit theo user`.
 - Task tiếp theo: học model routing, fallback và caching.
+
+### 2026-07-05 - Model routing, fallback và cache cho chat
+
+- Thêm `backend/src/providers/routing.ts` với `RoutingLlmProvider` bọc primary provider, optional fallback provider và in-memory response cache.
+- Thêm `InMemoryLlmResponseCache` có TTL; cache hit trả bản sao kết quả để tránh caller sửa object đã lưu.
+- Fallback chỉ chạy khi primary ném `LlmProviderError` có `retryable: true`; lỗi auth, permission, quota/config sai hoặc validation không fallback để không che dấu lỗi cần sửa.
+- Cập nhật provider factory: `LLM_PROVIDER` là primary, `LLM_FALLBACK_PROVIDER` là fallback optional, `CHAT_CACHE_TTL_MS` bật/tắt cache cho `generate()`.
+- Cập nhật `.env.example` với `LLM_FALLBACK_PROVIDER=none` và `CHAT_CACHE_TTL_MS=0`.
+- Cập nhật `backend/docs/08_CONVERSATION_PERSISTENCE.md` với trade-off routing/cache, ghi chú cache key đang dựa trên rendered prompt và stream endpoint chưa dùng cache/fallback để tránh phá perceived latency.
+- Thêm `backend/tests/provider-routing.test.ts` kiểm chứng cache TTL, fallback với lỗi retryable, không fallback với lỗi non-retryable và cache kết quả fallback.
+- Cập nhật config tests để kiểm chứng fallback provider cần credential và factory bọc provider khi bật fallback/cache.
+- Kiểm chứng: `npm run typecheck` thành công; `npm test` có 62 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành task `Hiểu model routing, fallback và caching`.
+- Task tiếp theo: theo dõi cost theo request và user.
 
 ## Session Notes Template
 

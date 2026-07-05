@@ -65,6 +65,27 @@ CHAT_RATE_LIMIT_MAX_REQUESTS=20
 CHAT_RATE_LIMIT_WINDOW_MS=60000
 ```
 
+## Model routing, fallback va cache
+
+`backend/src/providers/routing.ts` them wrapper cho provider selection:
+
+- `LLM_PROVIDER` la primary provider.
+- `LLM_FALLBACK_PROVIDER` co the la `none`, `fake`, `openai` hoac `gemini`.
+- Fallback chi chay khi primary nem `LlmProviderError` co `retryable: true`; auth, permission, quota/config sai va validation error khong fallback de tranh che dau loi can sua.
+- `CHAT_CACHE_TTL_MS` bat in-memory cache cho `generate()` result. Gia tri `0` tat cache.
+- Cache key hien tai la prompt da render sau conversation window. Nhu vay hai request co cung rendered prompt moi hit cache; user message giong nhau nhung history khac nhau se khong dung chung cache.
+- Cache luu ca ket qua fallback de request lap lai trong TTL khong lien tuc danh vao primary dang loi.
+- Stream endpoint hien van di thang qua primary provider. Cache/fallback cho streaming can thiet ke rieng neu muon giu perceived latency va khong duplicate partial tokens.
+- In-memory cache phu hop cho lab va single process. Production nhieu instance nen dung Redis hoac cache layer co tenant/user-aware key, TTL ngan va invalidation ro rang.
+
+Cac bien moi truong lien quan:
+
+```text
+LLM_PROVIDER=gemini
+LLM_FALLBACK_PROVIDER=fake
+CHAT_CACHE_TTL_MS=30000
+```
+
 ## PostgreSQL shape
 
 `conversations` co index `(user_id, updated_at DESC)` de list conversation gan day theo user.
@@ -89,6 +110,7 @@ Khi `DATABASE_URL` duoc set, `src/server.ts` tao `pg.Pool` va noi `PostgresConve
 
 - Route tests dung in-memory repository de kiem chung create conversation, append conversation dung owner va chan wrong-owner.
 - Rate limit tests kiem chung bucket rieng theo user, reset window, `429` response, stream endpoint bi chan va request bi limit khong persist message moi.
+- Provider routing tests kiem chung cache TTL, fallback khi primary fail retryable, khong fallback cho loi non-retryable va cache fallback result.
 - `tests/conversation-postgres.test.ts` dung fake database client de kiem chung migration SQL, parameter binding va row mapping cua `PostgresConversationRepository`.
 - `npm run smoke:conversation-db` chay migration vao PostgreSQL that, gui 2 request `/api/chat`, xac nhan co 4 message persisted va wrong-owner bi chan `404`.
 

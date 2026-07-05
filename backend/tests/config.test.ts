@@ -6,6 +6,7 @@ import { FakeLlmProvider } from "../src/providers/fake.js";
 import { GeminiLlmProvider } from "../src/providers/gemini.js";
 import { createLlmProvider } from "../src/providers/index.js";
 import { OpenAiLlmProvider } from "../src/providers/openai.js";
+import { RoutingLlmProvider } from "../src/providers/routing.js";
 
 describe("multi-provider configuration", () => {
   it("creates the fake provider by default", () => {
@@ -26,6 +27,10 @@ describe("multi-provider configuration", () => {
   it("requires credentials for the selected provider", () => {
     assert.throws(() => loadConfig({ LLM_PROVIDER: "gemini" }), /GEMINI_API_KEY/);
     assert.throws(() => loadConfig({ LLM_PROVIDER: "openai" }), /OPENAI_API_KEY/);
+    assert.throws(
+      () => loadConfig({ LLM_PROVIDER: "fake", LLM_FALLBACK_PROVIDER: "gemini" }),
+      /GEMINI_API_KEY/
+    );
   });
 
   it("parses filesystem agent auto-apply as an explicit boolean", () => {
@@ -70,5 +75,17 @@ describe("multi-provider configuration", () => {
 
     assert.equal(config.CHAT_RATE_LIMIT_MAX_REQUESTS, 5);
     assert.equal(config.CHAT_RATE_LIMIT_WINDOW_MS, 30_000);
+  });
+
+  it("wraps the primary provider when fallback or cache is configured", () => {
+    assert.ok(
+      createLlmProvider(
+        loadConfig({ LLM_PROVIDER: "fake", LLM_FALLBACK_PROVIDER: "gemini", GEMINI_API_KEY: "key" })
+      ) instanceof RoutingLlmProvider
+    );
+    assert.ok(
+      createLlmProvider(loadConfig({ LLM_PROVIDER: "fake", CHAT_CACHE_TTL_MS: "5000" })) instanceof
+        RoutingLlmProvider
+    );
   });
 });
