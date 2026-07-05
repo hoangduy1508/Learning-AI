@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createDeterministicEmbedding } from "../src/embeddings/deterministic.js";
+import { buildHnswExplainSql } from "../src/vector/query-plan.js";
 import {
   InMemoryVectorRepository,
   PostgresVectorRepository
@@ -159,5 +160,22 @@ describe("vector repository", () => {
     assert.ok(
       results.every((result) => result.matches[0]!.distance <= result.matches[1]!.distance)
     );
+  });
+
+  it("builds an EXPLAIN query for HNSW/vector query plan inspection", () => {
+    const queryPlan = buildHnswExplainSql({
+      tenantId: "tenant_a",
+      ownerUserId: "user_a",
+      embedding: [1, 0, 0, 0],
+      topK: 5,
+      metadata: { topic: "vector" }
+    });
+
+    assert.match(queryPlan.sql, /EXPLAIN \(ANALYZE, BUFFERS, COSTS, VERBOSE\)/);
+    assert.match(queryPlan.sql, /WHERE tenant_id = \$2/);
+    assert.match(queryPlan.sql, /AND owner_user_id = \$3/);
+    assert.match(queryPlan.sql, /metadata ->> \$5 = \$6/);
+    assert.match(queryPlan.sql, /ORDER BY embedding <=> \$1::vector/);
+    assert.deepEqual(queryPlan.values, ["[1,0,0,0]", "tenant_a", "user_a", 5, "topic", "vector"]);
   });
 });

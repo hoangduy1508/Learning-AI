@@ -6,6 +6,7 @@ import {
   createDeterministicEmbedding,
   formatVectorLiteral
 } from "../embeddings/deterministic.js";
+import { buildHnswExplainSql } from "../vector/query-plan.js";
 import { pgvectorSchemaSql } from "../vector/schema.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -89,6 +90,22 @@ try {
   console.log("Top pgvector matches:");
   for (const row of searchResult.rows) {
     console.log(`- distance=${Number(row.distance).toFixed(4)} ${row.content}`);
+  }
+
+  const queryPlan = buildHnswExplainSql({
+    tenantId,
+    ownerUserId: userId,
+    embedding: createDeterministicEmbedding("How do I store vectors in PostgreSQL?", 4),
+    topK: 2
+  });
+  const explainResult = await pool.query<{ "QUERY PLAN": string }>(
+    queryPlan.sql,
+    queryPlan.values
+  );
+
+  console.log("\nEXPLAIN plan:");
+  for (const row of explainResult.rows) {
+    console.log(row["QUERY PLAN"]);
   }
 
   try {

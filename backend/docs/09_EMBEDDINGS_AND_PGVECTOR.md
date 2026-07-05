@@ -132,7 +132,30 @@ Smoke test sẽ:
 - Tạo schema documents/chunks.
 - Insert 3 chunks với embedding deterministic 4 chiều.
 - Query top-k bằng cosine distance `<=>`.
+- In `EXPLAIN (ANALYZE, BUFFERS, COSTS, VERBOSE)` cho query retrieval.
 - Thử insert vector 3 chiều vào cột `vector(4)` và xác nhận pgvector reject.
+
+## Đọc query plan
+
+Smoke test hiện in query plan sau khi query top-k. Với dataset lab rất nhỏ, PostgreSQL có thể chọn:
+
+```text
+Index Scan using rag_document_chunks_tenant_owner_idx
+Sort Key: (embedding <=> '[...]'::vector)
+```
+
+Điều này là hợp lý: chỉ có vài chunk, planner thấy lọc theo `(tenant_id, owner_user_id)` rồi sort ít
+dòng rẻ hơn dùng HNSW. HNSW index vẫn đã được tạo trong schema:
+
+```sql
+CREATE INDEX IF NOT EXISTS rag_document_chunks_embedding_hnsw_idx
+  ON rag_document_chunks
+  USING hnsw (embedding vector_cosine_ops);
+```
+
+Khi dataset lớn hơn, query ít filter hơn hoặc planner thấy ANN index có lợi hơn, plan có thể dùng
+`rag_document_chunks_embedding_hnsw_idx`. Điểm cần học ở đây là: có index không có nghĩa planner luôn
+dùng index đó; phải đọc `EXPLAIN`, xem số dòng, filter, sort, buffer và execution time.
 
 ## Giới hạn hiện tại
 

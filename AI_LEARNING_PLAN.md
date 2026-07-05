@@ -204,12 +204,12 @@ Kiến thức:
 
 Thực hành:
 
-- [~] Chạy PostgreSQL + pgvector bằng Docker
+- [x] Chạy PostgreSQL + pgvector bằng Docker
 - [x] Tạo bảng document và document chunk
 - [x] Lưu embedding kèm metadata
 - [x] Truy vấn top-k bằng cosine distance
 - [x] So sánh kết quả với các query khác nhau
-- [ ] Thử HNSW index và xem query plan
+- [x] Thử HNSW index và xem query plan
 
 Definition of Done:
 
@@ -526,10 +526,10 @@ Observability / Evaluation / Cost Tracking
 
 ## Current Progress
 
-- Current phase: Embedding và Vector Search
-- Current week: Tuần 5
-- Current task: Chạy smoke pgvector và thử HNSW index/query plan khi có Docker hoặc PostgreSQL runtime thật
-- Blockers: Docker không có trong Windows PATH và WSL hiện báo không có distro; In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
+- Current phase: RAG Ingestion Pipeline
+- Current week: Tuần 6
+- Current task: Bắt đầu Tuần 6, thiết kế RAG ingestion pipeline: parse, clean, chunk, embed và index
+- Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
 ## Progress Log
@@ -919,6 +919,20 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run learn:retrieval` chạy thành công; `npm run typecheck` thành công; `npm test` có 75 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `So sánh kết quả với các query khác nhau`.
 - Task tiếp theo: khi có Docker/PostgreSQL runtime thật, chạy `npm run smoke:pgvector` và thêm `EXPLAIN` để xem HNSW query plan.
+
+### 2026-07-05 - Smoke pgvector thật và query plan
+
+- Xác nhận user đã khởi chạy pgvector bằng WSL Docker; backend Windows kết nối được qua `127.0.0.1:5432`.
+- Thêm `backend/src/vector/query-plan.ts` để build SQL `EXPLAIN (ANALYZE, BUFFERS, COSTS, VERBOSE)` cho query retrieval có tenant/user filter và optional metadata filter.
+- Cập nhật `backend/src/scripts/pgvector-smoke.ts` để sau khi query top-k sẽ in query plan.
+- Thêm test kiểm chứng SQL `EXPLAIN` có filter `tenant_id`, `owner_user_id`, metadata filter và `ORDER BY embedding <=> $1::vector`.
+- Chạy smoke thật với `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/ai_learning`: tạo extension/schema, insert chunks, query top-k và pgvector reject vector sai dimension.
+- Kết quả top match: `PostgreSQL pgvector stores embeddings for semantic search.` đứng đầu với distance `0.2727`.
+- Query plan trên dataset 3 chunk dùng `rag_document_chunks_tenant_owner_idx` rồi sort bằng cosine distance, chưa chọn HNSW vì dataset quá nhỏ; đây là kết quả hợp lý để học cách đọc planner.
+- Cập nhật `backend/docs/09_EMBEDDINGS_AND_PGVECTOR.md` với phần đọc query plan và lý do planner không nhất thiết dùng HNSW index.
+- Kiểm chứng: `npm run typecheck` thành công; `npm test` có 76 test pass; `npm run smoke:pgvector` thành công; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Hoàn thành toàn bộ thực hành Tuần 5.
+- Task tiếp theo: bắt đầu Tuần 6, thiết kế ingestion pipeline: parse, clean, chunk, embed và index.
 
 ## Session Notes Template
 
