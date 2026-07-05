@@ -9,6 +9,11 @@ const booleanEnvironmentValue = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const emptyStringToUndefined = (value: unknown) => (value === "" ? undefined : value);
+
+const optionalEnvironmentString = z.preprocess(emptyStringToUndefined, z.string().min(1).optional());
+const optionalEnvironmentUrl = z.preprocess(emptyStringToUndefined, z.string().url().optional());
+
 const environmentSchema = z
   .object({
     APP_ENV: z.string().default("development"),
@@ -36,12 +41,12 @@ const environmentSchema = z
     FILE_TOOL_ALLOW_DELETE: booleanEnvironmentValue.default(false),
     FILE_AGENT_AUTO_APPLY_WRITES: booleanEnvironmentValue.default(false),
     FILE_TOOL_MAX_FILE_BYTES: z.coerce.number().int().positive().default(1_000_000),
-    DATABASE_URL: z.string().url().optional(),
+    DATABASE_URL: optionalEnvironmentUrl,
     DATABASE_SSL: booleanEnvironmentValue.default(false),
     DATABASE_RUN_MIGRATIONS: booleanEnvironmentValue.default(false),
-    OPENAI_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: optionalEnvironmentString,
     OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini"),
-    GEMINI_API_KEY: z.string().min(1).optional(),
+    GEMINI_API_KEY: optionalEnvironmentString,
     GEMINI_MODEL: z.string().min(1).default("gemini-3.5-flash")
   })
   .superRefine((environment, context) => {

@@ -4,6 +4,7 @@ export interface SourceDocument {
   title: string;
   sourceUri?: string;
   mimeType: "text/plain" | "application/pdf";
+  contentEncoding?: "utf8" | "base64";
   content: string;
 }
 
@@ -16,7 +17,7 @@ export interface ParsedDocument {
   title: string;
   sourceUri?: string;
   pages: ParsedPage[];
-  parser: "plain-text" | "pdf-text-pages";
+  parser: "plain-text" | "pdf-text-pages" | "pdfjs";
 }
 
 export interface CleanedPage extends ParsedPage {

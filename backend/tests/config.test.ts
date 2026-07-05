@@ -53,6 +53,18 @@ describe("multi-provider configuration", () => {
     assert.equal(config.DATABASE_RUN_MIGRATIONS, false);
   });
 
+  it("treats empty optional environment variables as unset", () => {
+    const config = loadConfig({
+      DATABASE_URL: "",
+      OPENAI_API_KEY: "",
+      GEMINI_API_KEY: ""
+    });
+
+    assert.equal(config.DATABASE_URL, undefined);
+    assert.equal(config.OPENAI_API_KEY, undefined);
+    assert.equal(config.GEMINI_API_KEY, undefined);
+  });
+
   it("parses LLM retry configuration", () => {
     const config = loadConfig({
       LLM_RETRY_MAX_ATTEMPTS: "4",

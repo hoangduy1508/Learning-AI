@@ -11,7 +11,7 @@ import {
   createParentChildChunks
 } from "../src/ingestion/chunking.js";
 import { cleanParsedDocument, cleanText } from "../src/ingestion/clean.js";
-import { parseSourceDocument } from "../src/ingestion/parser.js";
+import { parseSourceDocument, parseSourceDocumentAsync } from "../src/ingestion/parser.js";
 import { IngestionPipeline } from "../src/ingestion/pipeline.js";
 import { InMemoryIngestionVersionStore } from "../src/ingestion/versioning.js";
 import { InMemoryVectorRepository } from "../src/vector/repository.js";
@@ -31,6 +31,25 @@ describe("ingestion pipeline", () => {
       parsed.pages.map((page) => page.pageNumber),
       [1, 2]
     );
+  });
+
+  it("parses real PDF bytes and preserves page numbers", async () => {
+    const parsed = await parseSourceDocumentAsync({
+      tenantId: "tenant_a",
+      ownerUserId: "user_a",
+      title: "Real PDF",
+      mimeType: "application/pdf",
+      contentEncoding: "base64",
+      content: createMinimalPdfBase64(["First page policy", "Second page citation"])
+    });
+
+    assert.equal(parsed.parser, "pdfjs");
+    assert.deepEqual(
+      parsed.pages.map((page) => page.pageNumber),
+      [1, 2]
+    );
+    assert.match(parsed.pages[0]!.text, /First page policy/);
+    assert.match(parsed.pages[1]!.text, /Second page citation/);
   });
 
   it("cleans noisy whitespace before chunking", () => {
@@ -256,3 +275,52 @@ describe("ingestion pipeline", () => {
     assert.equal(matches[0]?.metadata.sourceUri, "memory://guide.pdf");
   });
 });
+
+function createMinimalPdfBase64(pageTexts: string[]): string {
+  const objects = new Map<number, string>();
+  const fontObjectId = 3;
+  const pageObjectIds = pageTexts.map((_, index) => 4 + index);
+  const contentObjectIds = pageTexts.map((_, index) => 4 + pageTexts.length + index);
+
+  objects.set(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  objects.set(
+    2,
+    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${
+      pageTexts.length
+    } >>`
+  );
+  objects.set(fontObjectId, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+
+  for (const [index, text] of pageTexts.entries()) {
+    const pageObjectId = pageObjectIds[index]!;
+    const contentObjectId = contentObjectIds[index]!;
+    const stream = `BT /F1 24 Tf 72 720 Td (${escapePdfText(text)}) Tj ET`;
+    objects.set(
+      pageObjectId,
+      `<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /MediaBox [0 0 612 792] /Contents ${contentObjectId} 0 R >>`
+    );
+    objects.set(contentObjectId, `<< /Length ${Buffer.byteLength(stream, "ascii")} >>\nstream\n${stream}\nendstream`);
+  }
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const objectId of [...objects.keys()].sort((left, right) => left - right)) {
+    offsets[objectId] = Buffer.byteLength(pdf, "ascii");
+    pdf += `${objectId} 0 obj\n${objects.get(objectId)!}\nendobj\n`;
+  }
+
+  const xrefOffset = Buffer.byteLength(pdf, "ascii");
+  const objectCount = Math.max(...objects.keys()) + 1;
+  pdf += `xref\n0 ${objectCount}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let objectId = 1; objectId < objectCount; objectId += 1) {
+    pdf += `${String(offsets[objectId] ?? 0).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objectCount} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+
+  return Buffer.from(pdf, "ascii").toString("base64");
+}
+
+function escapePdfText(text: string): string {
+  return text.replace(/[\\()]/g, (match) => `\\${match}`);
+}

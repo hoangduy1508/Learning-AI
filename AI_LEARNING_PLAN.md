@@ -229,7 +229,7 @@ Kiến thức:
 Thực hành:
 
 - [x] Upload và kiểm tra loại/kích thước file
-- [ ] Parse PDF và giữ page number
+- [x] Parse PDF và giữ page number
 - [x] Chunk theo cấu trúc tài liệu khi có thể
 - [ ] Batch embedding
 - [x] Lưu checksum để tránh xử lý trùng
@@ -528,7 +528,7 @@ Observability / Evaluation / Cost Tracking
 
 - Current phase: RAG Ingestion Pipeline
 - Current week: Tuần 6
-- Current task: Parse PDF thật và giữ page number trong ingestion pipeline
+- Current task: Batch embedding trong ingestion pipeline
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
 - Last updated: 2026-07-05
 
@@ -1014,6 +1014,22 @@ Observability / Evaluation / Cost Tracking
 - Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 90 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
 - Hoàn thành task `Upload và kiểm tra loại/kích thước file`.
 - Task tiếp theo: parse PDF thật và giữ page number; nếu cần dependency parse PDF, cài thêm thư viện phù hợp rồi thay parser mô phỏng `---page---`.
+
+### 2026-07-05 - Parse PDF thật và giữ page number
+
+- Cài `pdfjs-dist@4.10.38` vì phiên bản này hỗ trợ Node >=20 của project; bản mới nhất yêu cầu Node >=22.
+- Mở rộng `SourceDocument` với `contentEncoding: "utf8" | "base64"` để upload JSON lab có thể gửi bytes PDF thật dạng base64.
+- Thêm `parseSourceDocumentAsync()` trong `backend/src/ingestion/parser.ts`; PDF base64 được parse bằng `pdfjs-dist/legacy/build/pdf.mjs`.
+- Parser PDF thật trả `parser: "pdfjs"` và giữ từng `{ pageNumber, text }` theo page từ PDF.
+- `IngestionPipeline` chuyển sang dùng parser async để endpoint upload có thể ingest PDF thật.
+- Cập nhật upload validation: `application/pdf` phải dùng `contentEncoding: "base64"`, `text/plain` phải dùng `utf8`; kích thước PDF tính theo bytes decoded.
+- Checksum cho base64 PDF hiện hash trên bytes decoded thay vì hash chuỗi base64.
+- Thêm test tạo PDF tối thiểu 2 page ngay trong test suite, kiểm chứng parser giữ page 1/page 2 và endpoint upload PDF trả `page_count: 2`.
+- Cập nhật `backend/docs/10_RAG_INGESTION_PIPELINE.md` bằng tiếng Việt có dấu với flow PDF thật/base64.
+- Kiểm chứng: `npm run typecheck` thành công; `npm run learn:ingestion` thành công; `npm test` có 92 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ gây EPERM khi ghi đè.
+- Lưu ý: `pdfjs-dist` trên Node 20 có in warning về polyfill rendering (`DOMMatrix`, `ImageData`, `Path2D`), nhưng text extraction trong test vẫn hoạt động; pipeline hiện không dùng rendering.
+- Hoàn thành task `Parse PDF và giữ page number`.
+- Task tiếp theo: batch embedding trong ingestion pipeline để chuẩn bị thay deterministic embedding bằng provider embedding thật.
 
 ## Session Notes Template
 

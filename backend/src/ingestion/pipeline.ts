@@ -2,7 +2,7 @@ import { createDeterministicEmbedding } from "../embeddings/deterministic.js";
 import type { VectorRepository } from "../vector/repository.js";
 import { chunkCleanedPages, type RecursiveChunkOptions } from "./chunking.js";
 import { cleanParsedDocument } from "./clean.js";
-import { parseSourceDocument } from "./parser.js";
+import { parseSourceDocumentAsync } from "./parser.js";
 import type { IngestionResult, SourceDocument } from "./types.js";
 import {
   buildIngestionDocumentKey,
@@ -38,7 +38,7 @@ export class IngestionPipeline {
       };
     }
 
-    const parsed = parseSourceDocument(source);
+    const parsed = await parseSourceDocumentAsync(source);
     const cleanedPages = cleanParsedDocument(parsed);
     const chunks = chunkCleanedPages(cleanedPages, parsed.parser, this.options.chunking);
 

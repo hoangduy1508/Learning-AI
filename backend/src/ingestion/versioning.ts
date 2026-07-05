@@ -67,9 +67,11 @@ export function buildIngestionDocumentKey(source: SourceDocument): IngestionDocu
 }
 
 export function createDocumentChecksum(source: SourceDocument): string {
-  return createHash("sha256")
-    .update(source.mimeType)
-    .update("\n")
-    .update(source.content)
-    .digest("hex");
+  const hash = createHash("sha256").update(source.mimeType).update("\n");
+  if (source.contentEncoding === "base64") {
+    hash.update(Buffer.from(source.content, "base64"));
+  } else {
+    hash.update(source.content, "utf8");
+  }
+  return hash.digest("hex");
 }

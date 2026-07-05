@@ -494,6 +494,30 @@ describe("AI Learning API", () => {
     assert.equal(typeof body.checksum, "string");
   });
 
+  it("uploads and ingests a base64 PDF while preserving extracted pages", async () => {
+    const app = createApp(stubProvider);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ingestion/upload",
+      payload: {
+        tenantId: "tenant_a",
+        ownerUserId: "user_a",
+        title: "PDF guide",
+        sourceUri: "memory://pdf-guide.pdf",
+        fileName: "pdf-guide.pdf",
+        mimeType: "application/pdf",
+        contentEncoding: "base64",
+        content: createMinimalPdfBase64(["First PDF page", "Second PDF page"])
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.mime_type, "application/pdf");
+    assert.equal(body.page_count, 2);
+    assert.equal(body.status, "indexed");
+  });
+
   it("rejects unsupported ingestion upload MIME types", async () => {
     const response = await createApp(stubProvider).inject({
       method: "POST",
@@ -657,3 +681,52 @@ describe("AI Learning API", () => {
     assert.deepEqual(blocked.json(), { detail: "Rate limit exceeded", retry_after_ms: 60_000 });
   });
 });
+
+function createMinimalPdfBase64(pageTexts: string[]): string {
+  const objects = new Map<number, string>();
+  const fontObjectId = 3;
+  const pageObjectIds = pageTexts.map((_, index) => 4 + index);
+  const contentObjectIds = pageTexts.map((_, index) => 4 + pageTexts.length + index);
+
+  objects.set(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  objects.set(
+    2,
+    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${
+      pageTexts.length
+    } >>`
+  );
+  objects.set(fontObjectId, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+
+  for (const [index, text] of pageTexts.entries()) {
+    const pageObjectId = pageObjectIds[index]!;
+    const contentObjectId = contentObjectIds[index]!;
+    const stream = `BT /F1 24 Tf 72 720 Td (${escapePdfText(text)}) Tj ET`;
+    objects.set(
+      pageObjectId,
+      `<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /MediaBox [0 0 612 792] /Contents ${contentObjectId} 0 R >>`
+    );
+    objects.set(contentObjectId, `<< /Length ${Buffer.byteLength(stream, "ascii")} >>\nstream\n${stream}\nendstream`);
+  }
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const objectId of [...objects.keys()].sort((left, right) => left - right)) {
+    offsets[objectId] = Buffer.byteLength(pdf, "ascii");
+    pdf += `${objectId} 0 obj\n${objects.get(objectId)!}\nendobj\n`;
+  }
+
+  const xrefOffset = Buffer.byteLength(pdf, "ascii");
+  const objectCount = Math.max(...objects.keys()) + 1;
+  pdf += `xref\n0 ${objectCount}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let objectId = 1; objectId < objectCount; objectId += 1) {
+    pdf += `${String(offsets[objectId] ?? 0).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objectCount} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+
+  return Buffer.from(pdf, "ascii").toString("base64");
+}
+
+function escapePdfText(text: string): string {
+  return text.replace(/[\\()]/g, (match) => `\\${match}`);
+}

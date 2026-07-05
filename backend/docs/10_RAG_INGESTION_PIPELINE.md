@@ -23,12 +23,16 @@ SourceDocument
   -> VectorRepository.createDocument()/insertChunk()
 ```
 
-Trong lab này, `application/pdf` được mô phỏng bằng plain text có delimiter `---page---`.
+Trong lab này, `application/pdf` có hai đường đi:
+
+- PDF text-pages mô phỏng bằng plain text có delimiter `---page---`, dùng cho test nhanh.
+- PDF thật dạng base64 với `contentEncoding: "base64"`, parse bằng `pdfjs-dist` và giữ page number.
+
 Điều quan trọng cần học ở bước này là contract của ingestion: parser phải trả về page number,
 chunk phải giữ metadata page, và index phải lưu metadata đó cùng embedding.
 
-PDF parser nhị phân thật sẽ được thêm ở task tiếp theo. Scanned PDF/OCR cũng là một nhánh riêng:
-nếu parser không lấy được text, ingestion job cần đánh dấu lỗi rõ ràng thay vì tạo chunk rỗng.
+Scanned PDF/OCR vẫn là một nhánh riêng: nếu parser không lấy được text, ingestion job cần đánh dấu lỗi rõ ràng
+thay vì tạo chunk rỗng.
 
 ## Parse
 
@@ -38,8 +42,8 @@ nếu parser không lấy được text, ingestion job cần đánh dấu lỗi 
 - `pages`: mảng `{ pageNumber, text }`.
 - `title` và `sourceUri`.
 
-Plain text mặc định là một page. PDF text-pages tách theo `---page---` để lab có thể kiểm chứng
-page trace mà chưa cần dependency parse PDF thật.
+Plain text mặc định là một page. PDF text-pages tách theo `---page---` để lab có thể kiểm chứng page trace
+nhanh. PDF thật được parse bằng `parseSourceDocumentAsync()` và trả `parser: "pdfjs"`.
 
 ## Clean
 
@@ -206,6 +210,7 @@ Payload hiện là JSON để học validation trước khi thêm multipart uplo
   "sourceUri": "memory://upload-guide.txt",
   "fileName": "upload-guide.txt",
   "mimeType": "text/plain",
+  "contentEncoding": "utf8",
   "content": "Text cần ingest"
 }
 ```
@@ -213,6 +218,8 @@ Payload hiện là JSON để học validation trước khi thêm multipart uplo
 Endpoint kiểm tra:
 
 - `mimeType` chỉ cho phép `text/plain` và `application/pdf`.
+- `text/plain` dùng `contentEncoding: "utf8"`.
+- `application/pdf` dùng `contentEncoding: "base64"` để gửi bytes PDF thật trong JSON lab.
 - `content` không được rỗng.
 - Kích thước tính bằng byte UTF-8 không được vượt `INGESTION_MAX_FILE_BYTES`.
 - Sau khi hợp lệ, request được chuyển thành `SourceDocument` và đưa vào `IngestionPipeline`.
@@ -223,7 +230,7 @@ content-type do client gửi không được tin tuyệt đối, và có thể c
 ## Giới Hạn Hiện Tại
 
 - Upload endpoint hiện dùng JSON lab, chưa phải multipart upload thật.
-- Chưa parse PDF nhị phân thật.
+- PDF nhị phân thật đã parse được từ base64 bằng `pdfjs-dist`, nhưng chưa có multipart upload từ UI.
 - Chưa có OCR cho scanned PDF.
 - Checksum/versioning hiện mới là in-memory lab; production cần bảng version và unique constraint theo
   tenant/owner/source/checksum.
