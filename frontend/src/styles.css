@@ -15,6 +15,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -35,6 +36,7 @@ button:disabled {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid #cbd5e1;
@@ -44,6 +46,10 @@ textarea {
 }
 
 input {
+  padding: 9px 10px;
+}
+
+select {
   padding: 9px 10px;
 }
 
@@ -92,7 +98,7 @@ p {
 
 .nav-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 4px;
   border: 1px solid #d7dee8;
@@ -234,6 +240,36 @@ p {
   margin-top: 14px;
 }
 
+.rag-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.rag-upload-grid label,
+.rag-query-form label,
+.record-list label {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-weight: 800;
+}
+
+.wide-field {
+  grid-column: 1 / -1;
+}
+
+.rag-query-form {
+  margin-top: 16px;
+}
+
+.rag-controls {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) minmax(90px, 0.8fr) minmax(110px, 0.8fr);
+  gap: 10px;
+}
+
 .top-composer {
   margin-top: 0;
 }
@@ -324,6 +360,10 @@ p {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 10px;
+}
+
+.single-column-grid {
+  grid-template-columns: 1fr 1fr;
 }
 
 .metric {
@@ -464,5 +504,10 @@ pre {
   .tall-panel {
     max-height: none;
     position: static;
+  }
+
+  .rag-upload-grid,
+  .rag-controls {
+    grid-template-columns: 1fr;
   }
 }

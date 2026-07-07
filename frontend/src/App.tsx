@@ -15,6 +15,15 @@ import {
   extractSupportTicket,
   type StructuredSupportTicketResult
 } from "./api/structured";
+import {
+  evaluateRag,
+  queryRag,
+  uploadRagDocument,
+  type RagEvaluationResult,
+  type RagQueryResult,
+  type RagUploadResult,
+  type RetrievalStrategy
+} from "./api/rag";
 import type { StreamEvent } from "./lib/stream-events";
 import "./styles.css";
 
@@ -36,7 +45,7 @@ interface ChatMessage {
   metadata?: { provider: string; model: string };
 }
 
-type AppView = "chat" | "structured" | "tools";
+type AppView = "chat" | "structured" | "tools" | "rag";
 type StreamStatus = "idle" | "streaming" | "done" | "error" | "stopped";
 type RequestStatus = "idle" | "loading" | "done" | "error";
 
@@ -73,6 +82,25 @@ export default function App() {
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [toolAuditEntries, setToolAuditEntries] = useState<ToolAuditEntry[]>([]);
   const [approvalResult, setApprovalResult] = useState<unknown>(null);
+
+  const [ragTenantId, setRagTenantId] = useState("tenant_demo");
+  const [ragOwnerUserId, setRagOwnerUserId] = useState("user_demo");
+  const [ragTitle, setRagTitle] = useState("Secure RAG notes");
+  const [ragSourceUri, setRagSourceUri] = useState("memory://secure-rag-notes.txt");
+  const [ragFile, setRagFile] = useState<File | null>(null);
+  const [ragUploadStatus, setRagUploadStatus] = useState<RequestStatus>("idle");
+  const [ragUploadResult, setRagUploadResult] = useState<RagUploadResult | null>(null);
+  const [ragError, setRagError] = useState<string | null>(null);
+  const [ragQuestion, setRagQuestion] = useState("Tài liệu nói gì về citation?");
+  const [ragStrategy, setRagStrategy] = useState<RetrievalStrategy>("hybrid");
+  const [ragTopK, setRagTopK] = useState(3);
+  const [ragThreshold, setRagThreshold] = useState(0.05);
+  const [ragQueryStatus, setRagQueryStatus] = useState<RequestStatus>("idle");
+  const [ragQueryResult, setRagQueryResult] = useState<RagQueryResult | null>(null);
+  const [ragExpectedText, setRagExpectedText] = useState("citation");
+  const [ragExpectedPage, setRagExpectedPage] = useState(1);
+  const [ragEvaluationStatus, setRagEvaluationStatus] = useState<RequestStatus>("idle");
+  const [ragEvaluationResult, setRagEvaluationResult] = useState<RagEvaluationResult | null>(null);
 
   const latestAssistant = useMemo(
     () => [...messages].reverse().find((entry) => entry.role === "assistant"),
@@ -325,6 +353,107 @@ export default function App() {
     }
   }
 
+  async function handleRagUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!ragFile || ragUploadStatus === "loading") {
+      return;
+    }
+
+    setRagError(null);
+    setRagUploadStatus("loading");
+    setRagUploadResult(null);
+    setRagQueryResult(null);
+    setRagEvaluationResult(null);
+
+    try {
+      const uploadContent = await readRagFile(ragFile);
+      const result = await uploadRagDocument({
+        tenantId: ragTenantId,
+        ownerUserId: ragOwnerUserId,
+        title: ragTitle,
+        sourceUri: ragSourceUri || `memory://${ragFile.name}`,
+        fileName: ragFile.name,
+        mimeType: uploadContent.mimeType,
+        contentEncoding: uploadContent.contentEncoding,
+        content: uploadContent.content
+      });
+      setRagUploadResult(result);
+      setRagUploadStatus("done");
+    } catch (uploadError) {
+      setRagError(uploadError instanceof Error ? uploadError.message : "Upload RAG thất bại");
+      setRagUploadStatus("error");
+    }
+  }
+
+  async function handleRagQuery(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedQuestion = ragQuestion.trim();
+    if (!trimmedQuestion || ragQueryStatus === "loading") {
+      return;
+    }
+
+    setRagError(null);
+    setRagQueryStatus("loading");
+    setRagQueryResult(null);
+
+    try {
+      setRagQueryResult(
+        await queryRag({
+          tenantId: ragTenantId,
+          ownerUserId: ragOwnerUserId,
+          query: trimmedQuestion,
+          strategy: ragStrategy,
+          topK: ragTopK,
+          similarityThreshold: ragThreshold
+        })
+      );
+      setRagQueryStatus("done");
+    } catch (queryError) {
+      setRagError(queryError instanceof Error ? queryError.message : "RAG query thất bại");
+      setRagQueryStatus("error");
+    }
+  }
+
+  async function handleRagEvaluate() {
+    if (!ragUploadResult || ragEvaluationStatus === "loading") {
+      return;
+    }
+
+    setRagError(null);
+    setRagEvaluationStatus("loading");
+    setRagEvaluationResult(null);
+
+    try {
+      setRagEvaluationResult(
+        await evaluateRag({
+          tenantId: ragTenantId,
+          ownerUserId: ragOwnerUserId,
+          strategy: ragStrategy,
+          topK: ragTopK,
+          similarityThreshold: ragThreshold,
+          cases: [
+            {
+              id: "ui_case_1",
+              question: ragQuestion,
+              expectedAnswerContains: ragExpectedText
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean),
+              expectedDocumentId: ragUploadResult.document_id,
+              expectedPageNumber: ragExpectedPage
+            }
+          ]
+        })
+      );
+      setRagEvaluationStatus("done");
+    } catch (evaluationError) {
+      setRagError(
+        evaluationError instanceof Error ? evaluationError.message : "RAG evaluation thất bại"
+      );
+      setRagEvaluationStatus("error");
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -354,6 +483,13 @@ export default function App() {
             onClick={() => setActiveView("tools")}
           >
             Tools
+          </button>
+          <button
+            type="button"
+            className={activeView === "rag" ? "nav-tab active" : "nav-tab"}
+            onClick={() => setActiveView("rag")}
+          >
+            RAG
           </button>
         </nav>
 
@@ -423,6 +559,43 @@ export default function App() {
             pendingActions={pendingActions}
             setAgentMessage={setAgentMessage}
             toolAuditEntries={toolAuditEntries}
+          />
+        ) : null}
+
+        {activeView === "rag" ? (
+          <RagWorkspace
+            error={ragError}
+            evaluationResult={ragEvaluationResult}
+            evaluationStatus={ragEvaluationStatus}
+            expectedPage={ragExpectedPage}
+            expectedText={ragExpectedText}
+            file={ragFile}
+            onEvaluate={handleRagEvaluate}
+            onQuery={handleRagQuery}
+            onUpload={handleRagUpload}
+            ownerUserId={ragOwnerUserId}
+            queryResult={ragQueryResult}
+            queryStatus={ragQueryStatus}
+            question={ragQuestion}
+            setExpectedPage={setRagExpectedPage}
+            setExpectedText={setRagExpectedText}
+            setFile={setRagFile}
+            setOwnerUserId={setRagOwnerUserId}
+            setQuestion={setRagQuestion}
+            setSourceUri={setRagSourceUri}
+            setStrategy={setRagStrategy}
+            setTenantId={setRagTenantId}
+            setThreshold={setRagThreshold}
+            setTitle={setRagTitle}
+            setTopK={setRagTopK}
+            sourceUri={ragSourceUri}
+            strategy={ragStrategy}
+            tenantId={ragTenantId}
+            threshold={ragThreshold}
+            title={ragTitle}
+            topK={ragTopK}
+            uploadResult={ragUploadResult}
+            uploadStatus={ragUploadStatus}
           />
         ) : null}
       </section>
@@ -757,6 +930,236 @@ function ToolsWorkspace(props: ToolsWorkspaceProps) {
   );
 }
 
+interface RagWorkspaceProps {
+  error: string | null;
+  evaluationResult: RagEvaluationResult | null;
+  evaluationStatus: RequestStatus;
+  expectedPage: number;
+  expectedText: string;
+  file: File | null;
+  onEvaluate(): Promise<void>;
+  onQuery(event: FormEvent<HTMLFormElement>): void;
+  onUpload(event: FormEvent<HTMLFormElement>): void;
+  ownerUserId: string;
+  queryResult: RagQueryResult | null;
+  queryStatus: RequestStatus;
+  question: string;
+  setExpectedPage(value: number): void;
+  setExpectedText(value: string): void;
+  setFile(value: File | null): void;
+  setOwnerUserId(value: string): void;
+  setQuestion(value: string): void;
+  setSourceUri(value: string): void;
+  setStrategy(value: RetrievalStrategy): void;
+  setTenantId(value: string): void;
+  setThreshold(value: number): void;
+  setTitle(value: string): void;
+  setTopK(value: number): void;
+  sourceUri: string;
+  strategy: RetrievalStrategy;
+  tenantId: string;
+  threshold: number;
+  title: string;
+  topK: number;
+  uploadResult: RagUploadResult | null;
+  uploadStatus: RequestStatus;
+}
+
+function RagWorkspace(props: RagWorkspaceProps) {
+  return (
+    <div className="workspace-grid">
+      <section className="chat-panel">
+        <header className="section-header">
+          <div>
+            <span className="section-kicker">Project 2</span>
+            <h2>Secure RAG PDF Assistant</h2>
+          </div>
+          <StatusPill status={props.queryStatus === "idle" ? props.uploadStatus : props.queryStatus} />
+        </header>
+
+        <form onSubmit={props.onUpload} className="rag-upload-grid">
+          <label>
+            Tenant
+            <input value={props.tenantId} onChange={(event) => props.setTenantId(event.target.value)} />
+          </label>
+          <label>
+            Owner
+            <input
+              value={props.ownerUserId}
+              onChange={(event) => props.setOwnerUserId(event.target.value)}
+            />
+          </label>
+          <label>
+            Title
+            <input value={props.title} onChange={(event) => props.setTitle(event.target.value)} />
+          </label>
+          <label>
+            Source URI
+            <input
+              value={props.sourceUri}
+              onChange={(event) => props.setSourceUri(event.target.value)}
+            />
+          </label>
+          <label className="wide-field">
+            Document
+            <input
+              type="file"
+              accept=".txt,.md,.pdf,text/plain,application/pdf"
+              onChange={(event) => props.setFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+          <div className="actions wide-field">
+            <button type="submit" disabled={!props.file || props.uploadStatus === "loading"}>
+              Upload & ingest
+            </button>
+          </div>
+        </form>
+
+        {props.uploadResult ? (
+          <section className="usage-grid">
+            <Metric label="Document" value={props.uploadResult.document_id.slice(0, 8)} />
+            <Metric label="Status" value={props.uploadResult.status} />
+            <Metric label="Pages" value={props.uploadResult.page_count} />
+            <Metric label="Chunks" value={props.uploadResult.chunk_count} />
+            <Metric label="Version" value={props.uploadResult.version} />
+            <Metric label="Batches" value={props.uploadResult.embedding_batch_count} />
+          </section>
+        ) : null}
+
+        <form onSubmit={props.onQuery} className="composer top-composer rag-query-form">
+          <label>
+            Câu hỏi cho tài liệu
+            <textarea
+              value={props.question}
+              onChange={(event) => props.setQuestion(event.target.value)}
+              rows={3}
+            />
+          </label>
+          <div className="rag-controls">
+            <label>
+              Strategy
+              <select
+                value={props.strategy}
+                onChange={(event) => props.setStrategy(event.target.value as RetrievalStrategy)}
+              >
+                <option value="hybrid">hybrid</option>
+                <option value="semantic">semantic</option>
+                <option value="keyword">keyword</option>
+              </select>
+            </label>
+            <label>
+              Top K
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={props.topK}
+                onChange={(event) => props.setTopK(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Threshold
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={props.threshold}
+                onChange={(event) => props.setThreshold(Number(event.target.value))}
+              />
+            </label>
+          </div>
+          <div className="actions">
+            <button type="submit" disabled={props.queryStatus === "loading" || !props.question.trim()}>
+              Hỏi tài liệu
+            </button>
+          </div>
+        </form>
+
+        {props.error ? <p className="error banner">Error: {props.error}</p> : null}
+
+        {props.queryResult ? (
+          <section className="answer-card">
+            <div className="message-meta">
+              <span>{props.queryResult.status}</span>
+              <span>{props.queryResult.citations.length} citations</span>
+            </div>
+            <p className="answer">{props.queryResult.answer}</p>
+          </section>
+        ) : (
+          <div className="empty-state">Upload tài liệu rồi hỏi để xem câu trả lời có citation.</div>
+        )}
+
+        {props.queryResult?.contexts.length ? (
+          <section className="record-list">
+            <h3>Retrieved contexts</h3>
+            {props.queryResult.contexts.map((context) => (
+              <details key={context.chunkId} className="record-card" open>
+                <summary>
+                  page {context.citation.pageNumber ?? "?"} - score {context.score.toFixed(3)}
+                </summary>
+                <p>{context.content}</p>
+                <CodeBlock value={context.citation} />
+              </details>
+            ))}
+          </section>
+        ) : null}
+      </section>
+
+      <aside className="detail-panel tall-panel">
+        <header className="section-header compact-header">
+          <div>
+            <span className="section-kicker">Evaluation</span>
+            <h2>Test case</h2>
+          </div>
+          <StatusPill status={props.evaluationStatus} />
+        </header>
+        <div className="record-list">
+          <label>
+            Expected contains
+            <input
+              value={props.expectedText}
+              onChange={(event) => props.setExpectedText(event.target.value)}
+            />
+          </label>
+          <label>
+            Expected page
+            <input
+              type="number"
+              min={1}
+              value={props.expectedPage}
+              onChange={(event) => props.setExpectedPage(Number(event.target.value))}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => void props.onEvaluate()}
+            disabled={!props.uploadResult || props.evaluationStatus === "loading"}
+          >
+            Chạy evaluation
+          </button>
+        </div>
+        {props.evaluationResult ? (
+          <>
+            <section className="usage-grid single-column-grid">
+              <Metric label="Cases" value={props.evaluationResult.caseCount} />
+              <Metric label="Recall" value={formatPercent(props.evaluationResult.retrievalRecall)} />
+              <Metric label="Answer" value={formatPercent(props.evaluationResult.answerCorrectness)} />
+              <Metric
+                label="Citation"
+                value={formatPercent(props.evaluationResult.citationCorrectness)}
+              />
+            </section>
+            <CodeBlock value={props.evaluationResult.report} />
+          </>
+        ) : (
+          <p className="muted">Evaluation report sẽ xuất hiện sau khi có document id từ upload.</p>
+        )}
+      </aside>
+    </div>
+  );
+}
+
 interface TelemetryPanelProps {
   costSummary: CostSummary | null;
   costSummaryError: string | null;
@@ -827,6 +1230,42 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 
 function formatUsd(value: number): string {
   return `$${value.toFixed(6)}`;
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+async function readRagFile(file: File): Promise<{
+  mimeType: "text/plain" | "application/pdf";
+  contentEncoding: "utf8" | "base64";
+  content: string;
+}> {
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    return {
+      mimeType: "application/pdf",
+      contentEncoding: "base64",
+      content: await readFileAsBase64(file)
+    };
+  }
+
+  return {
+    mimeType: "text/plain",
+    contentEncoding: "utf8",
+    content: await file.text()
+  };
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      resolve(result.includes(",") ? result.split(",").at(-1) ?? "" : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Không đọc được file"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function loadStoredConversation(): { conversationId?: string; messages: ChatMessage[] } {

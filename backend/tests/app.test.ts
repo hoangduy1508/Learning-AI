@@ -593,6 +593,84 @@ describe("AI Learning API", () => {
     assert.equal(second.json().document_id, first.json().document_id);
   });
 
+  it("queries uploaded documents with RAG citations", async () => {
+    const app = createApp(stubProvider);
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/ingestion/upload",
+      payload: {
+        tenantId: "tenant_a",
+        ownerUserId: "user_a",
+        title: "RAG UI guide",
+        sourceUri: "memory://rag-ui-guide.txt",
+        fileName: "rag-ui-guide.txt",
+        mimeType: "text/plain",
+        content: "Hybrid retrieval combines keyword evidence with vector similarity for citations."
+      }
+    });
+
+    const query = await app.inject({
+      method: "POST",
+      url: "/api/rag/query",
+      payload: {
+        tenantId: "tenant_a",
+        ownerUserId: "user_a",
+        query: "How does hybrid retrieval work?",
+        strategy: "hybrid",
+        topK: 3,
+        similarityThreshold: 0.01
+      }
+    });
+
+    assert.equal(upload.statusCode, 200);
+    assert.equal(query.statusCode, 200);
+    assert.equal(query.json().status, "answered");
+    assert.equal(query.json().citations[0].documentId, upload.json().document_id);
+    assert.equal(query.json().citations[0].pageNumber, 1);
+  });
+
+  it("evaluates uploaded document retrieval from user-provided cases", async () => {
+    const app = createApp(stubProvider);
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/ingestion/upload",
+      payload: {
+        tenantId: "tenant_a",
+        ownerUserId: "user_a",
+        title: "Evaluation guide",
+        sourceUri: "memory://evaluation-guide.txt",
+        fileName: "evaluation-guide.txt",
+        mimeType: "text/plain",
+        content: "Citation correctness checks whether the cited page supports the answer."
+      }
+    });
+
+    const evaluation = await app.inject({
+      method: "POST",
+      url: "/api/rag/evaluate",
+      payload: {
+        tenantId: "tenant_a",
+        ownerUserId: "user_a",
+        strategy: "hybrid",
+        topK: 3,
+        similarityThreshold: 0.01,
+        cases: [
+          {
+            id: "case_1",
+            question: "What does citation correctness check?",
+            expectedAnswerContains: ["Citation correctness"],
+            expectedDocumentId: upload.json().document_id,
+            expectedPageNumber: 1
+          }
+        ]
+      }
+    });
+
+    assert.equal(evaluation.statusCode, 200);
+    assert.equal(evaluation.json().caseCount, 1);
+    assert.match(evaluation.json().report, /Citation correctness/);
+  });
+
   it("streams chat events", async () => {
     const response = await createApp(stubProvider).inject({
       method: "POST",

@@ -1,12 +1,12 @@
 # AI Learning Backend
 
-Node.js + TypeScript service for Project 1 of the AI Integration learning plan.
+Backend Node.js + Fastify + TypeScript cho Project 1 và Project 2 trong kế hoạch học AI Integration.
 
-## Requirements
+## Yêu cầu
 
-- Node.js 20 or newer
+- Node.js 20 hoặc mới hơn
 
-## Setup
+## Cài đặt
 
 ```powershell
 cd backend
@@ -14,28 +14,100 @@ npm install
 Copy-Item .env.example .env
 ```
 
-The default `LLM_PROVIDER=fake` works without credentials. The route contract is independent
-of the selected provider.
+Mặc định `LLM_PROVIDER=fake` chạy được ngay, không cần credential.
 
-## Run
+## Chạy server
 
 ```powershell
 npm run dev
 ```
 
-Call the API with:
+Server mặc định chạy tại `http://127.0.0.1:8000`.
+
+Kiểm tra health:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
+
+## Project 1: Streaming AI Chat
+
+Backend cung cấp:
+
+- `POST /api/chat` cho chat request thường.
+- `POST /api/chat/stream` cho streaming chat qua Server-Sent Events.
+- Provider abstraction cho `fake`, `openai`, `gemini`.
+- Conversation persistence bằng PostgreSQL khi có `DATABASE_URL`.
+- Sliding-window context, retry, rate limit, fallback provider và response cache.
+- Token usage, latency, estimated cost và cache hit.
+- `POST /api/structured/support-ticket` cho structured output bằng Zod.
+- File agent API: `/api/agent/chat`, `/api/agent/pending`, `/api/agent/approve`, `/api/agent/audit`.
+
+Ví dụ gọi chat:
 
 ```powershell
 Invoke-RestMethod `
   -Method Post `
   -Uri http://127.0.0.1:8000/api/chat `
   -ContentType "application/json" `
-  -Body '{"message":"Explain what an LLM token is"}'
+  -Body '{"message":"Giải thích token của LLM là gì","userId":"demo-user"}'
 ```
 
-## Use OpenAI
+## Project 2: Secure RAG PDF Assistant
 
-Edit `.env` without committing it:
+Backend cung cấp:
+
+- `POST /api/ingestion/upload` để upload tài liệu `text/plain` hoặc `application/pdf`.
+- Parse, clean, chunk, embedding batch và index vào vector repository.
+- Versioning bằng checksum, skip duplicate upload.
+- Ingestion job status và error recovery.
+- `POST /api/rag/query` để hỏi đáp RAG có citation.
+- `POST /api/rag/evaluate` để đo retrieval recall, answer correctness và citation correctness.
+- Retrieval strategy: `semantic`, `keyword`, `hybrid`.
+
+Ví dụ upload tài liệu text:
+
+```powershell
+$body = @{
+  tenantId = "demo"
+  ownerUserId = "user-1"
+  title = "Ghi chú RAG"
+  sourceUri = "memory://rag-notes.txt"
+  fileName = "rag-notes.txt"
+  mimeType = "text/plain"
+  contentEncoding = "utf8"
+  content = "RAG gồm ingestion, retrieval, answer generation và citation."
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8000/api/ingestion/upload `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+Ví dụ hỏi RAG:
+
+```powershell
+$body = @{
+  tenantId = "demo"
+  ownerUserId = "user-1"
+  query = "RAG gồm những phần nào?"
+  strategy = "hybrid"
+  topK = 3
+  similarityThreshold = 0.05
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8000/api/rag/query `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+## Cấu hình provider
+
+OpenAI:
 
 ```dotenv
 LLM_PROVIDER=openai
@@ -43,9 +115,7 @@ OPENAI_API_KEY=your_api_key
 OPENAI_MODEL=gpt-4.1-mini
 ```
 
-The API key stays in the Node.js backend and is never sent to the React application.
-
-## Use Gemini
+Gemini:
 
 ```dotenv
 LLM_PROVIDER=gemini
@@ -53,29 +123,63 @@ GEMINI_API_KEY=your_api_key
 GEMINI_MODEL=gemini-3.5-flash
 ```
 
-Select exactly one provider with `LLM_PROVIDER`. Provider credentials remain on the backend.
-To add another provider later, implement `LlmProvider` and register it in
-`src/providers/index.ts`; routes and frontend code do not need to change.
+Chỉ chọn một provider chính bằng `LLM_PROVIDER`. API key ở lại backend và không gửi xuống frontend.
 
-## Production basics
-
-Useful environment knobs for the Project 1 demo:
+## Production knobs
 
 ```dotenv
 LLM_FALLBACK_PROVIDER=none
 CHAT_CACHE_TTL_MS=0
 CHAT_RATE_LIMIT_MAX_REQUESTS=20
 CHAT_RATE_LIMIT_WINDOW_MS=60000
+INGESTION_MAX_FILE_BYTES=1000000
 OPENAI_INPUT_USD_PER_1M_TOKENS=0
 OPENAI_OUTPUT_USD_PER_1M_TOKENS=0
+OPENAI_THINKING_USD_PER_1M_TOKENS=0
 GEMINI_INPUT_USD_PER_1M_TOKENS=0
 GEMINI_OUTPUT_USD_PER_1M_TOKENS=0
+GEMINI_THINKING_USD_PER_1M_TOKENS=0
 ```
 
-Cost pricing defaults to zero so the code does not bake in stale provider pricing. Fill these
-values from the active provider billing page when you want real estimates.
+Pricing mặc định bằng `0` để tránh hard-code giá đã cũ. Khi cần cost thật, cập nhật theo trang billing hiện tại của provider.
 
-## Verify
+## PostgreSQL và pgvector
+
+Chạy database từ root repo:
+
+```powershell
+docker compose up -d
+```
+
+Cấu hình `.env`:
+
+```dotenv
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/ai_learning
+DATABASE_SSL=false
+DATABASE_RUN_MIGRATIONS=true
+```
+
+Smoke test:
+
+```powershell
+npm run smoke:pgvector
+```
+
+## File agent
+
+File agent chỉ thao tác trong thư mục allowlist:
+
+```dotenv
+FILE_TOOL_ALLOWED_ROOTS=E:\Project\AI-learning
+FILE_TOOL_ALLOW_WRITE=false
+FILE_TOOL_ALLOW_DELETE=false
+FILE_AGENT_AUTO_APPLY_WRITES=false
+FILE_TOOL_MAX_FILE_BYTES=1000000
+```
+
+Giữ write/delete ở `false` nếu chỉ muốn đọc và tìm kiếm file.
+
+## Lệnh kiểm tra
 
 ```powershell
 npm run typecheck
@@ -83,63 +187,15 @@ npm test
 npm run build
 ```
 
-## Token lab
+## Lab
 
 ```powershell
 npm run learn:tokens
-```
-
-See [Tokens and Context](docs/01_TOKENS_AND_CONTEXT.md) for the concepts and interpretation.
-
-## Generation controls lab
-
-```powershell
 npm run learn:generation
-```
-
-See [Generation Controls](docs/02_GENERATION_CONTROLS.md) for system instructions, temperature,
-output limits, and stop conditions.
-
-## Streaming chat
-
-`POST /api/chat/stream` returns `text/event-stream` events with the contract documented in
-[Streaming Chat](docs/03_STREAMING_CHAT.md).
-
-## Conversation and telemetry
-
-When `DATABASE_URL` is configured, chat messages are persisted and the UI can show project
-telemetry for `demo-user`.
-
-```powershell
-Invoke-RestMethod `
-  -Method Get `
-  -Uri http://127.0.0.1:8000/api/users/demo-user/cost-summary
-```
-
-See [Conversation Persistence](docs/08_CONVERSATION_PERSISTENCE.md) for schema, context window,
-retry, rate limiting, provider routing, cache, and cost tracking notes.
-
-## pgvector lab
-
-`docker-compose.yml` uses `pgvector/pgvector:pg16` for Week 5. After PostgreSQL is running:
-
-```powershell
-$env:DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/ai_learning"
-npm run smoke:pgvector
-```
-
-See [Embeddings and pgvector](docs/09_EMBEDDINGS_AND_PGVECTOR.md).
-
-## RAG ingestion lab
-
-```powershell
 npm run learn:ingestion
+npm run learn:retrieval
+npm run learn:rag-evaluation
+npm run learn:agent-loop
 ```
 
-See [RAG Ingestion Pipeline](docs/10_RAG_INGESTION_PIPELINE.md) for parse, clean, chunk,
-embed, and index notes.
-
-## Filesystem tools
-
-The backend can list, read, search, write, and delete files inside configured allowlisted roots.
-See [Filesystem Tools](docs/06_FILESYSTEM_TOOLS.md).
+Tài liệu chi tiết nằm trong thư mục `backend/docs/`.

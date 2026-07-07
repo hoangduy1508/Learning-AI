@@ -18,6 +18,12 @@ import { InMemoryIngestionVersionStore } from "./ingestion/versioning.js";
 import { defaultRetryPolicy, retryLlmProviderCall, type RetryPolicy } from "./providers/retry.js";
 import type { LlmProvider } from "./providers/types.js";
 import { LlmProviderError } from "./providers/types.js";
+import {
+  buildEvaluationReport,
+  evaluateRagPipeline,
+  type RagEvaluationCase
+} from "./rag/evaluation.js";
+import { RagRetrievalPipeline } from "./rag/retrieval.js";
 import { InMemoryRateLimiter, type RateLimitDecision, type RateLimitPolicy } from "./rate-limit.js";
 import {
   extractSupportTicket,
@@ -35,6 +41,37 @@ const chatRequestSchema = z.object({
 
 const userParamsSchema = z.object({
   userId: z.string().min(1).max(128)
+});
+
+const ragQuerySchema = z.object({
+  tenantId: z.string().min(1).max(128),
+  ownerUserId: z.string().min(1).max(128),
+  query: z.string().min(1).max(5_000),
+  topK: z.coerce.number().int().min(1).max(10).default(3),
+  similarityThreshold: z.coerce.number().min(0).max(1).default(0.05),
+  strategy: z.enum(["semantic", "keyword", "hybrid"]).default("hybrid"),
+  metadata: z.record(z.union([z.string(), z.number(), z.boolean()])).optional()
+});
+
+const ragEvaluationSchema = z.object({
+  tenantId: z.string().min(1).max(128),
+  ownerUserId: z.string().min(1).max(128),
+  strategy: z.enum(["semantic", "keyword", "hybrid"]).default("hybrid"),
+  topK: z.coerce.number().int().min(1).max(10).default(3),
+  similarityThreshold: z.coerce.number().min(0).max(1).default(0.05),
+  cases: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(128),
+        question: z.string().min(1).max(5_000),
+        expectedAnswerContains: z.array(z.string().min(1)).min(1),
+        expectedDocumentId: z.string().min(1),
+        expectedPageNumber: z.coerce.number().int().positive(),
+        metadata: z.record(z.union([z.string(), z.number(), z.boolean()])).optional()
+      })
+    )
+    .min(1)
+    .max(50)
 });
 
 interface BuildAppOptions {
@@ -74,15 +111,17 @@ export function buildApp(
           jitterRatio: config.LLM_RETRY_JITTER_RATIO
         }
       : defaultRetryPolicy);
+  const vectorRepository = new InMemoryVectorRepository();
   const ingestionPipeline =
     options.ingestionPipeline ??
-    new IngestionPipeline(new InMemoryVectorRepository(), {
+    new IngestionPipeline(vectorRepository, {
       embeddingDimension: 32,
       embeddingBatchSize: 16,
       chunking: { maxCharacters: 1_000, overlapCharacters: 120 },
       jobStore: new InMemoryIngestionJobStore(),
       versionStore: new InMemoryIngestionVersionStore()
     });
+  const ragPipeline = new RagRetrievalPipeline(vectorRepository, { embeddingDimension: 32 });
   const ingestionMaxFileBytes = config?.INGESTION_MAX_FILE_BYTES ?? 1_000_000;
 
   app.get("/health", async () => ({ status: "ok" }));
@@ -120,6 +159,57 @@ export function buildApp(
       }
       throw error;
     }
+  });
+
+  app.post("/api/rag/query", async (request, reply) => {
+    const parsedRequest = ragQuerySchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.status(422).send({
+        detail: "Invalid RAG query",
+        errors: parsedRequest.error.flatten().fieldErrors
+      });
+    }
+
+    const result = await ragPipeline.answerWithCitations({
+      tenantId: parsedRequest.data.tenantId,
+      ownerUserId: parsedRequest.data.ownerUserId,
+      query: parsedRequest.data.query,
+      topK: parsedRequest.data.topK,
+      similarityThreshold: parsedRequest.data.similarityThreshold,
+      metadata: parsedRequest.data.metadata,
+      strategy: parsedRequest.data.strategy
+    });
+
+    return {
+      status: result.status,
+      answer: result.answer,
+      contexts: result.contexts,
+      citations: result.citations
+    };
+  });
+
+  app.post("/api/rag/evaluate", async (request, reply) => {
+    const parsedRequest = ragEvaluationSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.status(422).send({
+        detail: "Invalid RAG evaluation",
+        errors: parsedRequest.error.flatten().fieldErrors
+      });
+    }
+
+    const cases: RagEvaluationCase[] = parsedRequest.data.cases;
+    const result = await evaluateRagPipeline(ragPipeline, cases, {
+      tenantId: parsedRequest.data.tenantId,
+      ownerUserId: parsedRequest.data.ownerUserId,
+      strategy: parsedRequest.data.strategy,
+      topK: parsedRequest.data.topK,
+      similarityThreshold: parsedRequest.data.similarityThreshold
+    });
+
+    return {
+      ...result,
+      report: buildEvaluationReport(parsedRequest.data.strategy, result)
+    };
   });
 
   app.post("/api/chat", async (request, reply) => {
