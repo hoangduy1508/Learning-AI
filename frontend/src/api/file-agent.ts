@@ -6,7 +6,7 @@ export interface AgentToolCall {
 
 export interface PendingAction {
   id: string;
-  toolName: "write_file" | "delete_file";
+  toolName: "write_file" | "delete_file" | "create_support_ticket";
   args: Record<string, unknown>;
   createdAt: string;
 }
@@ -39,7 +39,7 @@ export interface ToolAuditResponse {
 }
 
 export interface ExecutedAction {
-  toolName: "write_file" | "delete_file";
+  toolName: "write_file" | "delete_file" | "create_support_ticket";
   args: Record<string, unknown>;
   result: unknown;
   executedAt: string;

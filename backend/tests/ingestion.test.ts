@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createDeterministicEmbedding } from "../src/embeddings/deterministic.js";
+import type { EmbeddingBatch } from "../src/embeddings/model.js";
 import { analyzeDocumentArtifacts } from "../src/ingestion/artifacts.js";
 import {
   chunkCleanedPages,
@@ -12,6 +13,7 @@ import {
 } from "../src/ingestion/chunking.js";
 import { cleanParsedDocument, cleanText } from "../src/ingestion/clean.js";
 import { parseSourceDocument, parseSourceDocumentAsync } from "../src/ingestion/parser.js";
+import { InMemoryIngestionJobStore } from "../src/ingestion/jobs.js";
 import { IngestionPipeline } from "../src/ingestion/pipeline.js";
 import { InMemoryIngestionVersionStore } from "../src/ingestion/versioning.js";
 import { InMemoryVectorRepository } from "../src/vector/repository.js";
@@ -227,6 +229,66 @@ describe("ingestion pipeline", () => {
 
     assert.equal(matches.length, 2);
     assert.ok(matches.every((match) => typeof match.metadata.page === "number"));
+  });
+
+  it("embeds chunks in batches and tracks ingestion job status", async () => {
+    const repository = new InMemoryVectorRepository();
+    const jobStore = new InMemoryIngestionJobStore();
+    const batchSizes: number[] = [];
+    const pipeline = new IngestionPipeline(repository, {
+      embeddingDimension: 8,
+      embeddingBatchSize: 2,
+      embeddingModel: {
+        dimension: 8,
+        async embedMany(batch: EmbeddingBatch) {
+          batchSizes.push(batch.texts.length);
+          return batch.texts.map((text) => createDeterministicEmbedding(text, 8));
+        }
+      },
+      chunking: { maxCharacters: 24, overlapCharacters: 4 },
+      jobStore
+    });
+
+    const result = await pipeline.ingest({
+      tenantId: "tenant_a",
+      ownerUserId: "user_a",
+      title: "Batch guide",
+      mimeType: "text/plain",
+      content: "Alpha content. Beta content. Gamma content. Delta content."
+    });
+
+    assert.deepEqual(batchSizes, [2, 2]);
+    assert.equal(result.embeddingBatchCount, 2);
+    assert.ok(result.jobId);
+
+    const job = await jobStore.findById(result.jobId!);
+    assert.equal(job?.status, "indexed");
+    assert.equal(job?.documentId, result.documentId);
+  });
+
+  it("marks ingestion jobs as failed when parsing or chunking fails", async () => {
+    const repository = new InMemoryVectorRepository();
+    const jobStore = new InMemoryIngestionJobStore();
+    const pipeline = new IngestionPipeline(repository, {
+      embeddingDimension: 8,
+      chunking: { maxCharacters: 24, overlapCharacters: 4 },
+      jobStore
+    });
+
+    await assert.rejects(
+      pipeline.ingest({
+        tenantId: "tenant_a",
+        ownerUserId: "user_a",
+        title: "Empty scanned PDF",
+        mimeType: "application/pdf",
+        content: " \n\n---page---\n\n "
+      }),
+      /Parsed PDF has no extractable text pages/
+    );
+
+    const failedJob = jobStore.list()[0];
+    assert.equal(failedJob?.status, "failed");
+    assert.equal(failedJob?.errorMessage, "Parsed PDF has no extractable text pages");
   });
 
   it("uses checksum and versioning to skip duplicate re-upload and index changed content", async () => {

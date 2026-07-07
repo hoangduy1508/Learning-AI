@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   approvePendingAction,
@@ -11,6 +11,10 @@ import {
 } from "./api/file-agent";
 import { getCostSummary, type CostSummary } from "./api/cost-summary";
 import { streamChat } from "./api/chat-stream";
+import {
+  extractSupportTicket,
+  type StructuredSupportTicketResult
+} from "./api/structured";
 import type { StreamEvent } from "./lib/stream-events";
 import "./styles.css";
 
@@ -21,54 +25,105 @@ interface UsageView {
   totalTokens: number;
   latencyMs: number;
   estimatedCostUsd?: number;
-  cacheHit?: boolean;
 }
 
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  status?: "streaming" | "done" | "error" | "stopped";
+  usage?: UsageView;
+  metadata?: { provider: string; model: string };
+}
+
+type AppView = "chat" | "structured" | "tools";
 type StreamStatus = "idle" | "streaming" | "done" | "error" | "stopped";
-type AgentStatus = "idle" | "loading" | "done" | "error";
+type RequestStatus = "idle" | "loading" | "done" | "error";
+
+const conversationStorageKey = "ai-learning.project1.conversation";
+const userStorageKey = "ai-learning.project1.user";
 
 export default function App() {
-  const userId = "demo-user";
-  const [activeMode, setActiveMode] = useState<"streaming" | "agent">("streaming");
-  const [message, setMessage] = useState("Giai thich HTTP streaming trong 2 cau ngan.");
-  const [answer, setAnswer] = useState("");
+  const [activeView, setActiveView] = useState<AppView>("chat");
+  const [userId, setUserId] = useState(() => localStorage.getItem(userStorageKey) ?? "demo-user");
+  const [message, setMessage] = useState("Giải thích HTTP streaming trong 2 câu ngắn.");
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadStoredConversation().messages);
   const [status, setStatus] = useState<StreamStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [metadata, setMetadata] = useState<{ provider: string; model: string } | null>(null);
-  const [usage, setUsage] = useState<UsageView | null>(null);
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    () => loadStoredConversation().conversationId
+  );
   const [costSummary, setCostSummary] = useState<CostSummary | null>(null);
   const [costSummaryError, setCostSummaryError] = useState<string | null>(null);
-  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const [agentMessage, setAgentMessage] = useState(
-    "Hay tao file notes/ai-test.txt voi noi dung: hello from file agent"
+  const [structuredMessage, setStructuredMessage] = useState(
+    "Khách hàng linh@example.com báo không tải được hóa đơn tháng này và đang rất gấp."
   );
-  const [agentStatus, setAgentStatus] = useState<AgentStatus>("idle");
+  const [structuredStatus, setStructuredStatus] = useState<RequestStatus>("idle");
+  const [structuredResult, setStructuredResult] = useState<StructuredSupportTicketResult | null>(null);
+  const [structuredError, setStructuredError] = useState<string | null>(null);
+
+  const [agentMessage, setAgentMessage] = useState(
+    "Cho biết thời tiết ở Ho Chi Minh City theo celsius, rồi tạo ticket nếu cần hỗ trợ."
+  );
+  const [agentStatus, setAgentStatus] = useState<RequestStatus>("idle");
   const [agentResult, setAgentResult] = useState<AgentChatResponse | null>(null);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [toolAuditEntries, setToolAuditEntries] = useState<ToolAuditEntry[]>([]);
   const [approvalResult, setApprovalResult] = useState<unknown>(null);
 
+  const latestAssistant = useMemo(
+    () => [...messages].reverse().find((entry) => entry.role === "assistant"),
+    [messages]
+  );
+
   useEffect(() => {
+    localStorage.setItem(userStorageKey, userId);
+  }, [userId]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      conversationStorageKey,
+      JSON.stringify({
+        conversationId,
+        messages
+      })
+    );
+  }, [conversationId, messages]);
+
+  useEffect(() => {
+    void refreshCostSummary();
     void refreshPendingActions();
     void refreshToolAudit();
-    void refreshCostSummary();
   }, []);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedMessage = message.trim();
     if (!trimmedMessage || status === "streaming") {
       return;
     }
 
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: trimmedMessage,
+      status: "done"
+    };
+    const assistantMessageId = crypto.randomUUID();
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      status: "streaming"
+    };
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
-    setAnswer("");
-    setUsage(null);
-    setMetadata(null);
+
+    setMessages((current) => [...current, userMessage, assistantMessage]);
+    setMessage("");
     setError(null);
     setStatus("streaming");
 
@@ -78,53 +133,102 @@ export default function App() {
         userId,
         conversationId,
         signal: abortController.signal,
-        onEvent: handleStreamEvent
+        onEvent: (streamEvent) => handleStreamEvent(streamEvent, assistantMessageId)
       });
 
       if (!abortController.signal.aborted) {
         setStatus("done");
+        updateAssistantMessage(assistantMessageId, { status: "done" });
         await refreshCostSummary();
       }
     } catch (streamError) {
       if (abortController.signal.aborted) {
         setStatus("stopped");
+        updateAssistantMessage(assistantMessageId, { status: "stopped" });
         return;
       }
 
-      setError(streamError instanceof Error ? streamError.message : "Unknown streaming error");
+      const messageText =
+        streamError instanceof Error ? streamError.message : "Lỗi streaming không xác định";
+      setError(messageText);
       setStatus("error");
+      updateAssistantMessage(assistantMessageId, {
+        status: "error",
+        content: messageText
+      });
     } finally {
       abortControllerRef.current = null;
     }
   }
 
-  function handleStreamEvent(event: StreamEvent) {
-    if (event.type === "start") {
-      setMetadata({ provider: event.provider, model: event.model });
-      if (event.conversationId) {
-        setConversationId(event.conversationId);
+  function handleStreamEvent(streamEvent: StreamEvent, assistantMessageId: string) {
+    if (streamEvent.type === "start") {
+      if (streamEvent.conversationId) {
+        setConversationId(streamEvent.conversationId);
       }
-    }
-
-    if (event.type === "delta") {
-      setAnswer((current) => current + event.text);
-    }
-
-    if (event.type === "usage") {
-      setUsage({
-        inputTokens: event.usage.inputTokens,
-        outputTokens: event.usage.outputTokens,
-        thinkingTokens: event.usage.thinkingTokens,
-        totalTokens: event.usage.totalTokens,
-        latencyMs: event.latencyMs,
-        estimatedCostUsd: event.estimatedCostUsd
+      updateAssistantMessage(assistantMessageId, {
+        metadata: { provider: streamEvent.provider, model: streamEvent.model }
       });
     }
 
-    if (event.type === "error") {
-      setError(event.message);
-      setStatus("error");
+    if (streamEvent.type === "delta") {
+      setMessages((current) =>
+        current.map((entry) =>
+          entry.id === assistantMessageId
+            ? { ...entry, content: `${entry.content}${streamEvent.text}` }
+            : entry
+        )
+      );
     }
+
+    if (streamEvent.type === "usage") {
+      updateAssistantMessage(assistantMessageId, {
+        usage: {
+          inputTokens: streamEvent.usage.inputTokens,
+          outputTokens: streamEvent.usage.outputTokens,
+          thinkingTokens: streamEvent.usage.thinkingTokens,
+          totalTokens: streamEvent.usage.totalTokens,
+          latencyMs: streamEvent.latencyMs,
+          estimatedCostUsd: streamEvent.estimatedCostUsd
+        }
+      });
+    }
+
+    if (streamEvent.type === "error") {
+      setError(streamEvent.message);
+      setStatus("error");
+      updateAssistantMessage(assistantMessageId, {
+        status: "error",
+        content: streamEvent.message
+      });
+    }
+  }
+
+  function updateAssistantMessage(id: string, patch: Partial<ChatMessage>) {
+    setMessages((current) =>
+      current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry))
+    );
+  }
+
+  function stopGenerating() {
+    abortControllerRef.current?.abort();
+    setStatus("stopped");
+    setMessages((current) =>
+      current.map((entry) =>
+        entry.role === "assistant" && entry.status === "streaming"
+          ? { ...entry, status: "stopped" }
+          : entry
+      )
+    );
+  }
+
+  function startNewConversation() {
+    abortControllerRef.current?.abort();
+    setConversationId(undefined);
+    setMessages([]);
+    setStatus("idle");
+    setError(null);
+    localStorage.removeItem(conversationStorageKey);
   }
 
   async function refreshCostSummary() {
@@ -134,14 +238,33 @@ export default function App() {
     } catch (summaryError) {
       setCostSummary(null);
       setCostSummaryError(
-        summaryError instanceof Error ? summaryError.message : "Cannot load cost summary"
+        summaryError instanceof Error ? summaryError.message : "Không tải được cost summary"
       );
     }
   }
 
-  function stopGenerating() {
-    abortControllerRef.current?.abort();
-    setStatus("stopped");
+  async function handleStructuredSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedMessage = structuredMessage.trim();
+    if (!trimmedMessage || structuredStatus === "loading") {
+      return;
+    }
+
+    setStructuredStatus("loading");
+    setStructuredError(null);
+    setStructuredResult(null);
+
+    try {
+      setStructuredResult(await extractSupportTicket(trimmedMessage));
+      setStructuredStatus("done");
+    } catch (structuredRequestError) {
+      setStructuredError(
+        structuredRequestError instanceof Error
+          ? structuredRequestError.message
+          : "Không extract được structured output"
+      );
+      setStructuredStatus("error");
+    }
   }
 
   async function handleAgentSubmit(event: FormEvent<HTMLFormElement>) {
@@ -164,7 +287,7 @@ export default function App() {
       await refreshToolAudit();
     } catch (agentRequestError) {
       setAgentError(
-        agentRequestError instanceof Error ? agentRequestError.message : "Unknown agent error"
+        agentRequestError instanceof Error ? agentRequestError.message : "Lỗi agent không xác định"
       );
       setAgentStatus("error");
     }
@@ -174,7 +297,9 @@ export default function App() {
     try {
       setPendingActions(await listPendingActions());
     } catch (pendingError) {
-      setAgentError(pendingError instanceof Error ? pendingError.message : "Cannot load actions");
+      setAgentError(
+        pendingError instanceof Error ? pendingError.message : "Không tải được pending actions"
+      );
     }
   }
 
@@ -182,7 +307,7 @@ export default function App() {
     try {
       setToolAuditEntries(await listToolAudit());
     } catch (auditError) {
-      setAgentError(auditError instanceof Error ? auditError.message : "Cannot load audit log");
+      setAgentError(auditError instanceof Error ? auditError.message : "Không tải được audit log");
     }
   }
 
@@ -196,56 +321,96 @@ export default function App() {
       await refreshPendingActions();
       await refreshToolAudit();
     } catch (approvalError) {
-      setAgentError(approvalError instanceof Error ? approvalError.message : "Approval failed");
+      setAgentError(approvalError instanceof Error ? approvalError.message : "Duyệt action thất bại");
     }
   }
 
   return (
-    <main className="page">
-      <section className="panel">
-        <div className="eyebrow">Project 1 - Streaming AI Chat</div>
-        <h1>AI Chat Lab</h1>
-        <p className="description">
-          Streaming chat with persisted conversations, provider telemetry, cost tracking, and a
-          file-agent workspace for tool calling.
-        </p>
-
-        <div className="tabs" role="tablist" aria-label="AI lab modes">
-          <button
-            type="button"
-            className={activeMode === "streaming" ? "tab active" : "tab"}
-            onClick={() => setActiveMode("streaming")}
-          >
-            Streaming Chat
-          </button>
-          <button
-            type="button"
-            className={activeMode === "agent" ? "tab active" : "tab"}
-            onClick={() => setActiveMode("agent")}
-          >
-            File Agent
-          </button>
+    <main className="app-shell">
+      <aside className="sidebar">
+        <div className="brand-block">
+          <span className="brand-kicker">Project 1</span>
+          <h1>Streaming AI Chat</h1>
         </div>
 
-        {activeMode === "streaming" ? (
-          <StreamingChatView
-            answer={answer}
+        <nav className="nav-tabs" aria-label="Project 1 views">
+          <button
+            type="button"
+            className={activeView === "chat" ? "nav-tab active" : "nav-tab"}
+            onClick={() => setActiveView("chat")}
+          >
+            Chat
+          </button>
+          <button
+            type="button"
+            className={activeView === "structured" ? "nav-tab active" : "nav-tab"}
+            onClick={() => setActiveView("structured")}
+          >
+            Structured
+          </button>
+          <button
+            type="button"
+            className={activeView === "tools" ? "nav-tab active" : "nav-tab"}
+            onClick={() => setActiveView("tools")}
+          >
+            Tools
+          </button>
+        </nav>
+
+        <section className="sidebar-section">
+          <label htmlFor="user-id">User</label>
+          <input
+            id="user-id"
+            value={userId}
+            onChange={(event) => setUserId(event.target.value)}
+            disabled={status === "streaming"}
+          />
+        </section>
+
+        <section className="sidebar-section">
+          <div className="meta-row">
+            <span>Conversation</span>
+            <strong>{conversationId ? conversationId.slice(0, 8) : "new"}</strong>
+          </div>
+          <button type="button" className="secondary-button full-width" onClick={startNewConversation}>
+            Tạo hội thoại mới
+          </button>
+        </section>
+
+        <TelemetryPanel
+          costSummary={costSummary}
+          costSummaryError={costSummaryError}
+          onRefreshCostSummary={refreshCostSummary}
+        />
+      </aside>
+
+      <section className="workspace">
+        {activeView === "chat" ? (
+          <ChatWorkspace
             error={error}
-            handleSubmit={handleSubmit}
+            latestAssistant={latestAssistant}
             message={message}
-            metadata={metadata}
+            messages={messages}
+            onSubmit={handleChatSubmit}
             setMessage={setMessage}
             status={status}
             stopGenerating={stopGenerating}
-            usage={usage}
-            conversationId={conversationId}
-            costSummary={costSummary}
-            costSummaryError={costSummaryError}
-            onRefreshCostSummary={refreshCostSummary}
-            userId={userId}
           />
-        ) : (
-          <FileAgentView
+        ) : null}
+
+        {activeView === "structured" ? (
+          <StructuredWorkspace
+            error={structuredError}
+            message={structuredMessage}
+            onSubmit={handleStructuredSubmit}
+            result={structuredResult}
+            setMessage={setStructuredMessage}
+            status={structuredStatus}
+          />
+        ) : null}
+
+        {activeView === "tools" ? (
+          <ToolsWorkspace
             agentError={agentError}
             agentMessage={agentMessage}
             agentResult={agentResult}
@@ -259,115 +424,200 @@ export default function App() {
             setAgentMessage={setAgentMessage}
             toolAuditEntries={toolAuditEntries}
           />
-        )}
+        ) : null}
       </section>
     </main>
   );
 }
 
-interface StreamingChatViewProps {
-  answer: string;
+interface ChatWorkspaceProps {
   error: string | null;
-  handleSubmit(event: FormEvent<HTMLFormElement>): void;
+  latestAssistant?: ChatMessage;
   message: string;
-  metadata: { provider: string; model: string } | null;
+  messages: ChatMessage[];
+  onSubmit(event: FormEvent<HTMLFormElement>): void;
   setMessage(message: string): void;
   status: StreamStatus;
   stopGenerating(): void;
-  usage: UsageView | null;
-  conversationId?: string;
-  costSummary: CostSummary | null;
-  costSummaryError: string | null;
-  onRefreshCostSummary(): Promise<void>;
-  userId: string;
 }
 
-function StreamingChatView(props: StreamingChatViewProps) {
+function ChatWorkspace(props: ChatWorkspaceProps) {
   return (
-    <>
-      <form onSubmit={props.handleSubmit} className="chat-form">
-        <label htmlFor="message">Message</label>
-        <textarea
-          id="message"
-          value={props.message}
-          onChange={(event) => props.setMessage(event.target.value)}
-          disabled={props.status === "streaming"}
-          rows={4}
-        />
-        <div className="actions">
-          <button type="submit" disabled={props.status === "streaming" || !props.message.trim()}>
-            Send
-          </button>
-          <button type="button" onClick={props.stopGenerating} disabled={props.status !== "streaming"}>
-            Stop generating
-          </button>
-        </div>
-      </form>
-
-      <section className="answer-card" aria-live="polite">
-        <div className="answer-header">
-          <span>Status: {props.status}</span>
-          {props.conversationId ? <span>Conversation: {props.conversationId.slice(0, 8)}</span> : null}
-          {props.metadata ? (
-            <span>
-              {props.metadata.provider} / {props.metadata.model}
-            </span>
-          ) : null}
-        </div>
-        {props.answer ? (
-          <p className="answer">{props.answer}</p>
-        ) : (
-          <p className="muted">No response yet.</p>
-        )}
-        {props.error ? <p className="error">Error: {props.error}</p> : null}
-      </section>
-
-      {props.usage ? (
-        <section className="usage-grid">
-          <Metric label="Input" value={props.usage.inputTokens} />
-          <Metric label="Output" value={props.usage.outputTokens} />
-          <Metric label="Thinking" value={props.usage.thinkingTokens ?? 0} />
-          <Metric label="Total" value={props.usage.totalTokens} />
-          <Metric label="Latency" value={`${props.usage.latencyMs} ms`} />
-          <Metric label="Cost" value={formatUsd(props.usage.estimatedCostUsd ?? 0)} />
-        </section>
-      ) : null}
-
-      <section className="telemetry-panel">
-        <div className="pending-header">
+    <div className="workspace-grid">
+      <section className="chat-panel">
+        <header className="section-header">
           <div>
-            <h2>Project telemetry</h2>
-            <p className="muted">User: {props.userId}</p>
+            <span className="section-kicker">Streaming</span>
+            <h2>Hội thoại</h2>
           </div>
-          <button type="button" className="secondary-button compact" onClick={props.onRefreshCostSummary}>
-            Refresh
-          </button>
+          <StatusPill status={props.status} />
+        </header>
+
+        <div className="message-list" aria-live="polite">
+          {props.messages.length === 0 ? (
+            <div className="empty-state">Chưa có tin nhắn.</div>
+          ) : (
+            props.messages.map((entry) => <MessageBubble key={entry.id} message={entry} />)
+          )}
         </div>
-        {props.costSummary ? (
-          <section className="usage-grid compact-grid">
-            <Metric label="Requests" value={props.costSummary.request_count} />
-            <Metric label="Input" value={props.costSummary.input_tokens} />
-            <Metric label="Output" value={props.costSummary.output_tokens} />
-            <Metric label="Thinking" value={props.costSummary.thinking_tokens} />
-            <Metric label="Total tokens" value={props.costSummary.total_tokens} />
-            <Metric label="Total cost" value={formatUsd(props.costSummary.estimated_cost_usd)} />
-          </section>
-        ) : (
-          <p className="muted">
-            Cost summary appears when the backend runs with conversation persistence enabled.
-          </p>
-        )}
-        {props.costSummaryError ? <p className="warning">{props.costSummaryError}</p> : null}
+
+        {props.error ? <p className="error banner">Error: {props.error}</p> : null}
+
+        <form onSubmit={props.onSubmit} className="composer">
+          <textarea
+            value={props.message}
+            onChange={(event) => props.setMessage(event.target.value)}
+            disabled={props.status === "streaming"}
+            rows={3}
+            aria-label="Tin nhắn"
+          />
+          <div className="actions">
+            <button type="submit" disabled={props.status === "streaming" || !props.message.trim()}>
+              Gửi
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              onClick={props.stopGenerating}
+              disabled={props.status !== "streaming"}
+            >
+              Dừng
+            </button>
+          </div>
+        </form>
       </section>
-    </>
+
+      <aside className="detail-panel">
+        <header className="section-header compact-header">
+          <div>
+            <span className="section-kicker">Telemetry</span>
+            <h2>Lượt trả lời mới nhất</h2>
+          </div>
+        </header>
+        {props.latestAssistant?.metadata ? (
+          <div className="meta-list">
+            <div className="meta-row">
+              <span>Provider</span>
+              <strong>{props.latestAssistant.metadata.provider}</strong>
+            </div>
+            <div className="meta-row">
+              <span>Model</span>
+              <strong>{props.latestAssistant.metadata.model}</strong>
+            </div>
+          </div>
+        ) : (
+          <p className="muted">Chưa có metadata.</p>
+        )}
+        {props.latestAssistant?.usage ? <UsageGrid usage={props.latestAssistant.usage} /> : null}
+      </aside>
+    </div>
   );
 }
 
-interface FileAgentViewProps {
+function MessageBubble({ message }: { message: ChatMessage }) {
+  return (
+    <article className={message.role === "user" ? "message user" : "message assistant"}>
+      <div className="message-meta">
+        <span>{message.role === "user" ? "User" : "Assistant"}</span>
+        {message.status ? <span>{message.status}</span> : null}
+      </div>
+      <p>{message.content || (message.status === "streaming" ? "..." : "")}</p>
+    </article>
+  );
+}
+
+interface StructuredWorkspaceProps {
+  error: string | null;
+  message: string;
+  onSubmit(event: FormEvent<HTMLFormElement>): void;
+  result: StructuredSupportTicketResult | null;
+  setMessage(message: string): void;
+  status: RequestStatus;
+}
+
+function StructuredWorkspace(props: StructuredWorkspaceProps) {
+  return (
+    <div className="workspace-grid">
+      <section className="chat-panel">
+        <header className="section-header">
+          <div>
+            <span className="section-kicker">Structured Output</span>
+            <h2>Support ticket</h2>
+          </div>
+          <StatusPill status={props.status} />
+        </header>
+
+        <form onSubmit={props.onSubmit} className="composer top-composer">
+          <textarea
+            value={props.message}
+            onChange={(event) => props.setMessage(event.target.value)}
+            disabled={props.status === "loading"}
+            rows={5}
+            aria-label="Nội dung ticket"
+          />
+          <div className="actions">
+            <button type="submit" disabled={props.status === "loading" || !props.message.trim()}>
+              Extract
+            </button>
+          </div>
+        </form>
+
+        {props.error ? <p className="error banner">Error: {props.error}</p> : null}
+
+        {props.result ? (
+          <section className="ticket-grid">
+            <Metric label="Category" value={props.result.ticket.category} />
+            <Metric label="Priority" value={props.result.ticket.priority} />
+            <Metric label="Review" value={props.result.ticket.needsHumanReview ? "yes" : "no"} />
+            <Metric label="Tokens" value={props.result.usage.total_tokens} />
+            <article className="ticket-card">
+              <h3>{props.result.ticket.title}</h3>
+              <p>{props.result.ticket.summary}</p>
+              <div className="meta-row">
+                <span>Email</span>
+                <strong>{props.result.ticket.customerEmail ?? "null"}</strong>
+              </div>
+            </article>
+          </section>
+        ) : (
+          <div className="empty-state">Chưa có structured output.</div>
+        )}
+      </section>
+
+      <aside className="detail-panel">
+        <header className="section-header compact-header">
+          <div>
+            <span className="section-kicker">Validation</span>
+            <h2>Raw output</h2>
+          </div>
+        </header>
+        {props.result ? (
+          <>
+            <div className="meta-list">
+              <div className="meta-row">
+                <span>Provider</span>
+                <strong>{props.result.provider}</strong>
+              </div>
+              <div className="meta-row">
+                <span>Model</span>
+                <strong>{props.result.model}</strong>
+              </div>
+            </div>
+            <CodeBlock value={props.result.rawText} />
+          </>
+        ) : (
+          <p className="muted">Zod validation result sẽ hiển thị ở đây.</p>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+interface ToolsWorkspaceProps {
   agentError: string | null;
   agentMessage: string;
   agentResult: AgentChatResponse | null;
-  agentStatus: AgentStatus;
+  agentStatus: RequestStatus;
   approvalResult: unknown;
   onApprove(actionId: string): Promise<void>;
   onRefreshAudit(): Promise<void>;
@@ -378,63 +628,69 @@ interface FileAgentViewProps {
   toolAuditEntries: ToolAuditEntry[];
 }
 
-function FileAgentView(props: FileAgentViewProps) {
+function ToolsWorkspace(props: ToolsWorkspaceProps) {
   return (
-    <section className="agent-layout">
-      <div>
-        <form onSubmit={props.onSubmit} className="chat-form">
-          <label htmlFor="agent-message">Agent message</label>
+    <div className="workspace-grid">
+      <section className="chat-panel">
+        <header className="section-header">
+          <div>
+            <span className="section-kicker">Tool Calling</span>
+            <h2>Agent tools</h2>
+          </div>
+          <StatusPill status={props.agentStatus} />
+        </header>
+
+        <form onSubmit={props.onSubmit} className="composer top-composer">
           <textarea
-            id="agent-message"
             value={props.agentMessage}
             onChange={(event) => props.setAgentMessage(event.target.value)}
             disabled={props.agentStatus === "loading"}
-            rows={5}
+            rows={4}
+            aria-label="Agent message"
           />
           <div className="actions">
             <button
               type="submit"
               disabled={props.agentStatus === "loading" || !props.agentMessage.trim()}
             >
-              Run agent
+              Chạy
             </button>
             <button type="button" className="secondary-button" onClick={props.onRefreshPending}>
-              Refresh pending
+              Pending
+            </button>
+            <button type="button" className="secondary-button" onClick={props.onRefreshAudit}>
+              Audit
             </button>
           </div>
         </form>
 
-        <section className="answer-card" aria-live="polite">
-          <div className="answer-header">
-            <span>Status: {props.agentStatus}</span>
-            <span>Gemini tools</span>
-          </div>
+        {props.agentError ? <p className="error banner">Error: {props.agentError}</p> : null}
+
+        <section className="answer-card">
           {props.agentResult ? (
             <>
-              <p className="answer">{props.agentResult.answer || "No text answer."}</p>
+              <p className="answer">{props.agentResult.answer || "Không có text answer."}</p>
               {props.agentResult.approvalRequired ? (
                 <p className="warning">
-                  Approval required: {props.agentResult.approvalRequired.toolName}{" "}
-                  {props.agentResult.approvalRequired.id}
+                  Approval required: {props.agentResult.approvalRequired.toolName}
                 </p>
               ) : null}
               {props.agentResult.executedActions?.length ? (
                 <p className="success">
-                  Executed {props.agentResult.executedActions.length} write/delete action(s).
+                  Đã thực thi {props.agentResult.executedActions.length} action.
                 </p>
               ) : null}
             </>
           ) : (
-            <p className="muted">Ask the agent to list, read, search, write, or delete files.</p>
+            <div className="empty-state">Chưa có tool call.</div>
           )}
-          {props.agentError ? <p className="error">Error: {props.agentError}</p> : null}
         </section>
 
         {props.agentResult?.toolCalls.length ? (
-          <section className="tool-call-list">
-            <h2>Tool calls</h2>
+          <section className="record-list">
+            <h3>Tool calls</h3>
             {props.agentResult.toolCalls.map((toolCall, index) => (
-              <details key={`${toolCall.name}-${index}`} className="tool-call" open>
+              <details key={`${toolCall.name}-${index}`} className="record-card" open>
                 <summary>{toolCall.name}</summary>
                 <CodeBlock value={{ args: toolCall.args, result: toolCall.result }} />
               </details>
@@ -442,70 +698,52 @@ function FileAgentView(props: FileAgentViewProps) {
           </section>
         ) : null}
 
-        {props.agentResult?.executedActions?.length ? (
-          <section className="tool-call-list">
-            <h2>Executed actions</h2>
-            {props.agentResult.executedActions.map((action, index) => (
-              <details key={`${action.toolName}-${action.executedAt}-${index}`} className="tool-call" open>
-                <summary>
-                  {action.toolName} at {new Date(action.executedAt).toLocaleString()}
-                </summary>
-                <CodeBlock value={{ args: action.args, result: action.result }} />
-              </details>
-            ))}
-          </section>
-        ) : null}
-
         {props.approvalResult !== null ? (
-          <section className="tool-call-list">
-            <h2>Last approval result</h2>
+          <section className="record-list">
+            <h3>Approval result</h3>
             <CodeBlock value={props.approvalResult} />
           </section>
         ) : null}
-      </div>
+      </section>
 
-      <aside className="pending-panel">
-        <div className="pending-header">
-          <h2>Pending actions</h2>
-          <button type="button" className="secondary-button compact" onClick={props.onRefreshPending}>
-            Refresh
-          </button>
-        </div>
-        <p className="muted">
-          Auto-apply is enabled in this learning setup, so write/delete actions should execute
-          immediately. This panel is only used if auto-apply is disabled later.
-        </p>
+      <aside className="detail-panel tall-panel">
+        <header className="section-header compact-header">
+          <div>
+            <span className="section-kicker">Human approval</span>
+            <h2>Pending actions</h2>
+          </div>
+        </header>
         {props.pendingActions.length === 0 ? (
-          <p className="muted">No pending actions.</p>
+          <p className="muted">Không có action chờ duyệt.</p>
         ) : (
-          <div className="pending-list">
+          <div className="record-list">
             {props.pendingActions.map((action) => (
-              <article key={action.id} className="pending-card">
-                <div className="pending-meta">
-                  <strong>{action.toolName}</strong>
-                  <span>{new Date(action.createdAt).toLocaleString()}</span>
+              <article key={action.id} className="record-card">
+                <div className="meta-row">
+                  <span>{action.toolName}</span>
+                  <strong>{new Date(action.createdAt).toLocaleTimeString()}</strong>
                 </div>
                 <CodeBlock value={action.args} />
                 <button type="button" onClick={() => void props.onApprove(action.id)}>
-                  Approve
+                  Duyệt
                 </button>
               </article>
             ))}
           </div>
         )}
 
-        <div className="pending-header audit-header">
-          <h2>Tool audit</h2>
-          <button type="button" className="secondary-button compact" onClick={props.onRefreshAudit}>
-            Refresh
-          </button>
-        </div>
+        <header className="section-header compact-header audit-title">
+          <div>
+            <span className="section-kicker">Audit</span>
+            <h2>Tool log</h2>
+          </div>
+        </header>
         {props.toolAuditEntries.length === 0 ? (
-          <p className="muted">No audited tool calls yet.</p>
+          <p className="muted">Chưa có audit entry.</p>
         ) : (
-          <div className="pending-list">
+          <div className="record-list">
             {props.toolAuditEntries.slice(0, 8).map((entry) => (
-              <details key={entry.id} className="pending-card" open>
+              <details key={entry.id} className="record-card">
                 <summary>
                   {entry.toolName} - {entry.status}
                 </summary>
@@ -515,15 +753,70 @@ function FileAgentView(props: FileAgentViewProps) {
           </div>
         )}
       </aside>
+    </div>
+  );
+}
+
+interface TelemetryPanelProps {
+  costSummary: CostSummary | null;
+  costSummaryError: string | null;
+  onRefreshCostSummary(): Promise<void>;
+}
+
+function TelemetryPanel(props: TelemetryPanelProps) {
+  return (
+    <section className="sidebar-section">
+      <div className="sidebar-title">
+        <span>Cost</span>
+        <button type="button" className="icon-button" onClick={props.onRefreshCostSummary}>
+          ↻
+        </button>
+      </div>
+      {props.costSummary ? (
+        <div className="meta-list">
+          <div className="meta-row">
+            <span>Requests</span>
+            <strong>{props.costSummary.request_count}</strong>
+          </div>
+          <div className="meta-row">
+            <span>Tokens</span>
+            <strong>{props.costSummary.total_tokens}</strong>
+          </div>
+          <div className="meta-row">
+            <span>USD</span>
+            <strong>{formatUsd(props.costSummary.estimated_cost_usd)}</strong>
+          </div>
+        </div>
+      ) : (
+        <p className="muted small-text">Cost summary cần conversation persistence.</p>
+      )}
+      {props.costSummaryError ? <p className="warning small-text">{props.costSummaryError}</p> : null}
     </section>
   );
 }
 
-function CodeBlock({ value }: { value: unknown }) {
-  return <pre>{JSON.stringify(value, null, 2)}</pre>;
+function UsageGrid({ usage }: { usage: UsageView }) {
+  return (
+    <section className="usage-grid">
+      <Metric label="Input" value={usage.inputTokens} />
+      <Metric label="Output" value={usage.outputTokens} />
+      <Metric label="Thinking" value={usage.thinkingTokens ?? 0} />
+      <Metric label="Total" value={usage.totalTokens} />
+      <Metric label="Latency" value={`${usage.latencyMs} ms`} />
+      <Metric label="Cost" value={formatUsd(usage.estimatedCostUsd ?? 0)} />
+    </section>
+  );
 }
 
-function Metric({ label, value }: { label: number | string; value: number | string }) {
+function StatusPill({ status }: { status: string }) {
+  return <span className={`status-pill status-${status}`}>{status}</span>;
+}
+
+function CodeBlock({ value }: { value: unknown }) {
+  return <pre>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</pre>;
+}
+
+function Metric({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="metric">
       <span>{label}</span>
@@ -534,4 +827,21 @@ function Metric({ label, value }: { label: number | string; value: number | stri
 
 function formatUsd(value: number): string {
   return `$${value.toFixed(6)}`;
+}
+
+function loadStoredConversation(): { conversationId?: string; messages: ChatMessage[] } {
+  const raw = localStorage.getItem(conversationStorageKey);
+  if (!raw) {
+    return { messages: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as { conversationId?: string; messages?: ChatMessage[] };
+    return {
+      conversationId: parsed.conversationId,
+      messages: Array.isArray(parsed.messages) ? parsed.messages : []
+    };
+  } catch {
+    return { messages: [] };
+  }
 }

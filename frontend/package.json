@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test tests/stream-events.test.ts tests/chat-stream.test.ts tests/file-agent.test.ts tests/cost-summary.test.ts"
+    "test": "node --import tsx --test tests/stream-events.test.ts tests/chat-stream.test.ts tests/file-agent.test.ts tests/cost-summary.test.ts tests/structured.test.ts"
   },
   "dependencies": {
     "react": "^19.2.0",

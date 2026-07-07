@@ -2,6 +2,7 @@ import { createDeterministicEmbedding } from "../embeddings/deterministic.js";
 import { analyzeDocumentArtifacts } from "../ingestion/artifacts.js";
 import { compareChunkingStrategies, createParentChildChunks } from "../ingestion/chunking.js";
 import { cleanParsedDocument } from "../ingestion/clean.js";
+import { InMemoryIngestionJobStore } from "../ingestion/jobs.js";
 import { parseSourceDocument } from "../ingestion/parser.js";
 import { IngestionPipeline } from "../ingestion/pipeline.js";
 import type { SourceDocument } from "../ingestion/types.js";
@@ -10,12 +11,15 @@ import { InMemoryVectorRepository } from "../vector/repository.js";
 
 const repository = new InMemoryVectorRepository();
 const versionStore = new InMemoryIngestionVersionStore();
+const jobStore = new InMemoryIngestionJobStore();
 const pipeline = new IngestionPipeline(repository, {
   embeddingDimension: 32,
+  embeddingBatchSize: 2,
   chunking: {
     maxCharacters: 220,
     overlapCharacters: 40
   },
+  jobStore,
   versionStore
 });
 
@@ -75,6 +79,8 @@ console.log("\nRe-upload result");
 console.log(JSON.stringify(duplicateResult, null, 2));
 console.log("\nChanged document result");
 console.log(JSON.stringify(changedResult, null, 2));
+console.log("\nIngestion jobs");
+console.log(JSON.stringify(jobStore.list(), null, 2));
 console.log("\nDocument artifact report");
 console.log(JSON.stringify(artifactReport, null, 2));
 console.log("\nChunking strategy comparison");

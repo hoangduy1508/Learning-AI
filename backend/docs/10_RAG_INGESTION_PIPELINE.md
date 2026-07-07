@@ -19,7 +19,7 @@ SourceDocument
   -> parseSourceDocument()
   -> cleanParsedDocument()
   -> chunkCleanedPages()
-  -> createDeterministicEmbedding()
+  -> EmbeddingModel.embedMany()
   -> VectorRepository.createDocument()/insertChunk()
 ```
 
@@ -147,8 +147,21 @@ chunk riêng trong database và để child row chỉ reference parent id/index.
 
 ## Embed Và Index
 
-Lab dùng `createDeterministicEmbedding()` để chạy offline. Production sẽ thay bằng embedding provider thật,
-nhưng repository contract không đổi:
+Lab dùng `DeterministicEmbeddingModel` để chạy offline. Production sẽ thay bằng embedding provider thật,
+nhưng repository contract không đổi.
+
+Điểm mới là pipeline không embed từng chunk rời rạc nữa. `IngestionPipeline` gom content của các chunk và gọi
+`embedTextsInBatches()`:
+
+- `embeddingBatchSize` quyết định mỗi request embedding xử lý bao nhiêu chunk.
+- `EmbeddingModel.embedMany()` là interface để thay deterministic model bằng provider thật.
+- Kết quả embedding được map lại đúng thứ tự chunk trước khi insert vào vector repository.
+
+Batch embedding quan trọng vì ingestion thường là batch workload: một file có thể sinh hàng chục hoặc hàng trăm
+chunk. Gọi provider từng chunk làm tăng latency, overhead HTTP và nguy cơ rate limit. Batch giúp gom request,
+nhưng batch quá lớn có thể chạm giới hạn input của provider hoặc làm retry đắt hơn khi một batch fail.
+
+Sau khi embed:
 
 - Document được tạo một lần trong `rag_documents`.
 - Từng chunk được insert vào `rag_document_chunks`.
@@ -156,6 +169,28 @@ nhưng repository contract không đổi:
 
 Đây là nền tảng cho citation về sau: câu trả lời RAG chỉ nên trích dẫn document/page nằm trong retrieved
 context, không để model tự tạo citation.
+
+## Trạng Thái Ingestion Và Error Recovery
+
+`backend/src/ingestion/jobs.ts` thêm `IngestionJobStore` với các trạng thái:
+
+- `pending`: job vừa được tạo, chưa bắt đầu xử lý.
+- `running`: pipeline đang parse/clean/chunk/embed/index.
+- `indexed`: ingest thành công.
+- `skipped_duplicate`: checksum đã tồn tại nên không index lại.
+- `failed`: parse, chunk, embed hoặc index thất bại.
+
+Trong lab hiện tại, job store là in-memory để dễ test. Ý tưởng production là lưu job trong database để UI hoặc
+worker có thể poll trạng thái. Khi file lỗi, pipeline đánh dấu job `failed` kèm `errorMessage`; lỗi của một file
+không làm mất các document/chunk đã index từ job khác.
+
+Error recovery nên tách theo ranh giới rõ:
+
+- Lỗi validation upload: reject trước khi tạo job nặng.
+- Lỗi parse/OCR: job failed, không tạo chunk rỗng.
+- Lỗi batch embedding: retry theo batch; nếu vẫn fail thì job failed.
+- Lỗi index giữa chừng: production nên dùng transaction hoặc trạng thái version `indexing` rồi chỉ promote thành
+  `active` khi toàn bộ chunk đã ghi xong.
 
 ## Document Versioning Và Re-indexing
 

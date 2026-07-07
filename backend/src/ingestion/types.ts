@@ -46,6 +46,7 @@ export interface DocumentChunk {
 }
 
 export interface IngestionResult {
+  jobId?: string;
   documentId: string;
   chunkIds: string[];
   pageCount: number;
@@ -53,4 +54,5 @@ export interface IngestionResult {
   checksum: string;
   version: number;
   status: "indexed" | "skipped_duplicate";
+  embeddingBatchCount?: number;
 }

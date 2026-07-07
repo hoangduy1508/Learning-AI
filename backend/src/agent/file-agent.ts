@@ -1,11 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  FunctionCallingConfigMode,
-  GoogleGenAI,
-  Type,
-  type Content,
-  type FunctionDeclaration
-} from "@google/genai";
+import { FunctionCallingConfigMode, GoogleGenAI, Type, type Content, type FunctionDeclaration } from "@google/genai";
 
 import type { AppConfig } from "../config.js";
 import { FileSystemToolService, FileToolError, parseAllowedRoots } from "../filesystem/service.js";
@@ -13,9 +7,15 @@ import { getFakeOrderStatus } from "./order-tool.js";
 import { FakeSupportTicketStore, supportTicketToolProposalSchema } from "./support-ticket-tool.js";
 import { getFakeWeather } from "./weather-tool.js";
 
-interface ContentGenerator {
+export interface ContentGenerator {
   models: {
-    generateContent: GoogleGenAI["models"]["generateContent"];
+    generateContent(params: unknown): Promise<{
+      text?: string;
+      functionCalls?: Array<{
+        name?: string;
+        args?: Record<string, unknown>;
+      }>;
+    }>;
   };
 }
 
@@ -67,12 +67,19 @@ export class FileAgentService {
     if (!client && !config.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY is required for file agent");
     }
-    this.client =
+    const googleClient =
       client ??
       new GoogleGenAI({
         apiKey: config.GEMINI_API_KEY,
         httpOptions: { timeout: config.LLM_TIMEOUT_SECONDS * 1_000 }
       });
+    this.client = client ?? {
+      models: {
+        async generateContent(params: unknown) {
+          return await googleClient.models.generateContent(params as Parameters<GoogleGenAI["models"]["generateContent"]>[0]);
+        }
+      }
+    };
     this.files = new FileSystemToolService({
       allowedRoots: parseAllowedRoots(config.FILE_TOOL_ALLOWED_ROOTS),
       allowWrite: config.FILE_TOOL_ALLOW_WRITE,

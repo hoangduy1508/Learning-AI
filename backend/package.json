@@ -10,12 +10,14 @@
     "learn:tokens": "tsx src/scripts/token-lab.ts",
     "learn:generation": "tsx src/scripts/generation-lab.ts",
     "learn:retrieval": "tsx src/scripts/retrieval-comparison-lab.ts",
+    "learn:rag-evaluation": "tsx src/scripts/rag-evaluation-lab.ts",
+    "learn:agent-loop": "tsx src/scripts/agent-loop-lab.ts",
     "learn:ingestion": "tsx src/scripts/ingestion-lab.ts",
     "smoke:conversation-db": "tsx src/scripts/conversation-db-smoke.ts",
     "smoke:pgvector": "tsx src/scripts/pgvector-smoke.ts",
     "reference:azure-foundry-agent": "tsx src/scripts/azure-foundry-file-agent-reference.ts",
     "typecheck": "tsc -p tsconfig.test.json",
-    "test": "node --import tsx --test tests/app.test.ts tests/config.test.ts tests/streaming.test.ts tests/filesystem.test.ts tests/agent.test.ts tests/structured.test.ts tests/conversation-postgres.test.ts tests/conversation-context.test.ts tests/retry.test.ts tests/rate-limit.test.ts tests/provider-routing.test.ts tests/cost.test.ts tests/embeddings.test.ts tests/vector-repository.test.ts tests/ingestion.test.ts"
+    "test": "node --import tsx --test tests/app.test.ts tests/config.test.ts tests/streaming.test.ts tests/filesystem.test.ts tests/agent.test.ts tests/structured.test.ts tests/conversation-postgres.test.ts tests/conversation-context.test.ts tests/retry.test.ts tests/rate-limit.test.ts tests/provider-routing.test.ts tests/cost.test.ts tests/embeddings.test.ts tests/vector-repository.test.ts tests/ingestion.test.ts tests/rag.test.ts"
   },
   "engines": {
     "node": ">=20"

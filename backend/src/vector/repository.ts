@@ -31,6 +31,14 @@ export interface VectorSearchQuery {
   metadata?: Record<string, string | number | boolean>;
 }
 
+export interface KeywordSearchQuery {
+  tenantId: string;
+  ownerUserId: string;
+  query: string;
+  topK: number;
+  metadata?: Record<string, string | number | boolean>;
+}
+
 export interface VectorSearchMatch {
   id: string;
   documentId: string;
@@ -39,10 +47,15 @@ export interface VectorSearchMatch {
   distance: number;
 }
 
+export interface KeywordSearchMatch extends Omit<VectorSearchMatch, "distance"> {
+  score: number;
+}
+
 export interface VectorRepository {
   createDocument(input: VectorDocumentInput): Promise<string>;
   insertChunk(input: VectorChunkInput): Promise<string>;
   searchTopK(query: VectorSearchQuery): Promise<VectorSearchMatch[]>;
+  searchKeyword(query: KeywordSearchQuery): Promise<KeywordSearchMatch[]>;
 }
 
 interface StoredChunk extends Required<Omit<VectorChunkInput, "metadata">> {
@@ -101,6 +114,54 @@ export class InMemoryVectorRepository implements VectorRepository {
         distance: cosineDistance(query.embedding, chunk.embedding)
       }))
       .sort((left, right) => left.distance - right.distance)
+      .slice(0, query.topK);
+  }
+
+  async searchKeyword(query: KeywordSearchQuery): Promise<KeywordSearchMatch[]> {
+    const terms = tokenize(query.query);
+    if (terms.length === 0) {
+      return [];
+    }
+
+    const candidates = [...this.chunks.entries()].filter(([, chunk]) => {
+      return (
+        chunk.tenantId === query.tenantId &&
+        chunk.ownerUserId === query.ownerUserId &&
+        metadataMatches(chunk.metadata, query.metadata)
+      );
+    });
+    const documentFrequency = new Map<string, number>();
+    for (const term of new Set(terms)) {
+      documentFrequency.set(
+        term,
+        candidates.filter(([, chunk]) => tokenize(chunk.content).includes(term)).length
+      );
+    }
+
+    return candidates
+      .map(([id, chunk]) => {
+        const chunkTokens = tokenize(chunk.content);
+        const score = terms.reduce((sum, term) => {
+          const termFrequency = chunkTokens.filter((token) => token === term).length;
+          if (termFrequency === 0) {
+            return sum;
+          }
+          const inverseDocumentFrequency = Math.log(
+            1 + (candidates.length - (documentFrequency.get(term) ?? 0) + 0.5) /
+              ((documentFrequency.get(term) ?? 0) + 0.5)
+          );
+          return sum + termFrequency * inverseDocumentFrequency;
+        }, 0);
+        return {
+          id,
+          documentId: chunk.documentId,
+          content: chunk.content,
+          metadata: chunk.metadata,
+          score
+        };
+      })
+      .filter((match) => match.score > 0)
+      .sort((left, right) => right.score - left.score)
       .slice(0, query.topK);
   }
 }
@@ -186,6 +247,44 @@ export class PostgresVectorRepository implements VectorRepository {
       distance: Number(row.distance)
     }));
   }
+
+  async searchKeyword(query: KeywordSearchQuery): Promise<KeywordSearchMatch[]> {
+    const values: unknown[] = [query.query, query.tenantId, query.ownerUserId, query.topK];
+    const metadataSql = buildMetadataFilterSql(query.metadata, values);
+
+    const result = await this.pool.query<{
+      id: string;
+      document_id: string;
+      content: string;
+      metadata: Record<string, unknown>;
+      score: string;
+    }>(
+      `
+        SELECT
+          id,
+          document_id,
+          content,
+          metadata,
+          ts_rank(to_tsvector('simple', content), websearch_to_tsquery('simple', $1)) AS score
+        FROM rag_document_chunks
+        WHERE tenant_id = $2
+          AND owner_user_id = $3
+          AND to_tsvector('simple', content) @@ websearch_to_tsquery('simple', $1)
+          ${metadataSql}
+        ORDER BY score DESC
+        LIMIT $4
+      `,
+      values
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      documentId: row.document_id,
+      content: row.content,
+      metadata: row.metadata,
+      score: Number(row.score)
+    }));
+  }
 }
 
 function metadataMatches(
@@ -215,6 +314,10 @@ function buildMetadataFilterSql(
   });
 
   return conditions.join("\n          ");
+}
+
+function tokenize(text: string): string[] {
+  return text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
 }
 
 export type VectorQueryable = Pool | PoolClient;

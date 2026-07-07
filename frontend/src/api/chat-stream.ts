@@ -21,7 +21,9 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
+    const text = await response.text();
+    const detail = readErrorDetail(text);
+    throw new Error(detail ? `${detail} (status ${response.status})` : `Request failed with status ${response.status}`);
   }
 
   if (!response.body) {
@@ -50,5 +52,21 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
   }
   for (const event of parser.flush()) {
     options.onEvent(event);
+  }
+}
+
+function readErrorDetail(text: string): string | null {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    const data = JSON.parse(text) as { detail?: unknown; retry_after_ms?: unknown };
+    const detail = typeof data.detail === "string" ? data.detail : null;
+    const retryAfter =
+      typeof data.retry_after_ms === "number" ? ` Retry after ${data.retry_after_ms} ms.` : "";
+    return detail ? `${detail}.${retryAfter}` : null;
+  } catch {
+    return text;
   }
 }

@@ -231,9 +231,9 @@ Thực hành:
 - [x] Upload và kiểm tra loại/kích thước file
 - [x] Parse PDF và giữ page number
 - [x] Chunk theo cấu trúc tài liệu khi có thể
-- [ ] Batch embedding
+- [x] Batch embedding
 - [x] Lưu checksum để tránh xử lý trùng
-- [ ] Thêm trạng thái ingestion và error recovery
+- [x] Thêm trạng thái ingestion và error recovery
 
 Definition of Done:
 
@@ -245,22 +245,22 @@ Definition of Done:
 
 Kiến thức:
 
-- [ ] Hiểu top-k và similarity threshold
-- [ ] Hiểu keyword/BM25 và semantic search
-- [ ] Hiểu hybrid search
-- [ ] Hiểu query rewriting và multi-query retrieval
-- [ ] Hiểu reranking
-- [ ] Phân biệt retrieval quality và generation quality
+- [x] Hiểu top-k và similarity threshold
+- [x] Hiểu keyword/BM25 và semantic search
+- [x] Hiểu hybrid search
+- [x] Hiểu query rewriting và multi-query retrieval
+- [x] Hiểu reranking
+- [x] Phân biệt retrieval quality và generation quality
 
 Thực hành:
 
-- [ ] Xây retrieval pipeline có metadata filter
-- [ ] Trả lời kèm citation và page number
-- [ ] Từ chối khi không đủ bằng chứng
-- [ ] Tạo 30-50 câu hỏi có đáp án chuẩn
-- [ ] Đo retrieval recall, answer correctness và citation correctness
-- [ ] So sánh ít nhất hai chunking/retrieval strategy
-- [ ] Hoàn thiện Project 2
+- [x] Xây retrieval pipeline có metadata filter
+- [x] Trả lời kèm citation và page number
+- [x] Từ chối khi không đủ bằng chứng
+- [x] Tạo 30-50 câu hỏi có đáp án chuẩn
+- [x] Đo retrieval recall, answer correctness và citation correctness
+- [x] So sánh ít nhất hai chunking/retrieval strategy
+- [x] Hoàn thiện Project 2
 
 Definition of Done:
 
@@ -271,20 +271,20 @@ Definition of Done:
 
 Kiến thức:
 
-- [ ] Hiểu agent loop: decide, act, observe, answer
-- [ ] Phân biệt agent và deterministic workflow
-- [ ] Hiểu state, memory, planning và tool selection
-- [ ] Hiểu maximum iteration, timeout và budget
-- [ ] Hiểu human-in-the-loop và excessive agency
+- [x] Hiểu agent loop: decide, act, observe, answer
+- [x] Phân biệt agent và deterministic workflow
+- [x] Hiểu state, memory, planning và tool selection
+- [x] Hiểu maximum iteration, timeout và budget
+- [x] Hiểu human-in-the-loop và excessive agency
 
 Thực hành:
 
-- [ ] Tự viết agent loop nhỏ không dùng framework
-- [ ] Cho agent lựa chọn giữa 2-3 read-only tools
-- [ ] Thêm giới hạn số vòng lặp
-- [ ] Thêm timeout và token/cost budget
-- [ ] Thêm audit log cho tool call
-- [ ] Ngăn tool result độc hại trở thành instruction
+- [x] Tự viết agent loop nhỏ không dùng framework
+- [x] Cho agent lựa chọn giữa 2-3 read-only tools
+- [x] Thêm giới hạn số vòng lặp
+- [x] Thêm timeout và token/cost budget
+- [x] Thêm audit log cho tool call
+- [x] Ngăn tool result độc hại trở thành instruction
 
 Definition of Done:
 
@@ -526,11 +526,11 @@ Observability / Evaluation / Cost Tracking
 
 ## Current Progress
 
-- Current phase: RAG Ingestion Pipeline
-- Current week: Tuần 6
-- Current task: Batch embedding trong ingestion pipeline
+- Current phase: LangGraph.js
+- Current week: Tuần 9
+- Current task: Chuyển agent loop sang LangGraph.js
 - Blockers: In-app Browser không có tool callable trong phiên hiện tại; `/api/agent/chat` với Gemini có thể gửi metadata/nội dung file tới provider bên ngoài; auto-apply write/delete chỉ nên dùng với thư mục được allowlist và dữ liệu học tập
-- Last updated: 2026-07-05
+- Last updated: 2026-07-07
 
 ## Progress Log
 
@@ -1030,6 +1030,44 @@ Observability / Evaluation / Cost Tracking
 - Lưu ý: `pdfjs-dist` trên Node 20 có in warning về polyfill rendering (`DOMMatrix`, `ImageData`, `Path2D`), nhưng text extraction trong test vẫn hoạt động; pipeline hiện không dùng rendering.
 - Hoàn thành task `Parse PDF và giữ page number`.
 - Task tiếp theo: batch embedding trong ingestion pipeline để chuẩn bị thay deterministic embedding bằng provider embedding thật.
+
+### 2026-07-07 - Hoàn tất Tuần 6: batch embedding, trạng thái ingestion và error recovery
+
+- Thêm `backend/src/embeddings/model.ts` với `EmbeddingModel`, `DeterministicEmbeddingModel` và `embedTextsInBatches()` để pipeline có thể embed nhiều chunk theo batch thay vì từng chunk rời rạc.
+- Mở rộng `IngestionPipeline` với `embeddingBatchSize`, optional `embeddingModel` và `embeddingBatchCount` trong `IngestionResult`.
+- Thêm `backend/src/ingestion/jobs.ts` với `IngestionJobStore` và `InMemoryIngestionJobStore`; job có trạng thái `pending`, `running`, `indexed`, `skipped_duplicate`, `failed`.
+- Pipeline giờ đánh dấu job failed khi parse/chunk/embed/index lỗi, giúp một file lỗi không làm hỏng toàn bộ tiến trình ingestion.
+- Cập nhật `POST /api/ingestion/upload` trả thêm `job_id` và `embedding_batch_count`.
+- Cập nhật `backend/src/scripts/ingestion-lab.ts` để in danh sách ingestion jobs và số batch embedding.
+- Cập nhật `backend/docs/10_RAG_INGESTION_PIPELINE.md` bằng tiếng Việt có dấu, giải thích batch embedding, job status và error recovery.
+- Thêm test kiểm chứng batch size, số batch, job indexed và job failed khi PDF không có text extractable.
+- Hoàn thành hai task còn lại của Tuần 6: `Batch embedding` và `Thêm trạng thái ingestion và error recovery`.
+
+### 2026-07-07 - Hoàn tất Tuần 7: retrieval, citation và RAG evaluation
+
+- Mở rộng `VectorRepository` với `searchKeyword()`; in-memory path dùng BM25-lite, PostgreSQL path dùng `to_tsvector`, `websearch_to_tsquery` và `ts_rank`.
+- Thêm `backend/src/rag/retrieval.ts` với `RagRetrievalPipeline`, hỗ trợ `semantic`, `keyword`, `hybrid`, metadata filter, top-k, similarity threshold, citation và refusal khi không đủ bằng chứng.
+- `answerWithCitations()` chỉ tạo citation từ context thật đã retrieve: `chunkId`, `documentId`, `pageNumber`, `sourceUri`; không cho model tự bịa nguồn ngoài context.
+- Thêm `backend/src/rag/evaluation.ts` để đo `retrievalRecall`, `answerCorrectness` và `citationCorrectness`.
+- Thêm `backend/src/scripts/rag-evaluation-lab.ts` và script `npm run learn:rag-evaluation`; lab tạo 30 câu hỏi có đáp án chuẩn và so sánh `semantic`, `keyword`, `hybrid`.
+- Kết quả lab hiện tại: semantic recall 50%, keyword recall 100%, hybrid recall 70%; đây là minh họa rằng strategy tốt phụ thuộc dữ liệu và cách query, không thể chỉ nhìn demo thủ công.
+- Thêm `backend/docs/11_RAG_RETRIEVAL_EVALUATION.md` giải thích top-k, threshold, BM25/semantic/hybrid, query rewriting, multi-query retrieval, reranking, retrieval quality và generation quality.
+- Thêm `backend/tests/rag.test.ts` kiểm chứng metadata filter, citation/page number, refusal và evaluation metrics.
+- Hoàn thành toàn bộ checklist Tuần 7 và Project 2 ở mức lab có code/test/evaluation report.
+
+### 2026-07-07 - Hoàn tất Tuần 8: agent loop từ nguyên lý
+
+- Thêm `backend/src/agent/loop.ts` để tự viết agent loop nhỏ không dùng framework theo chu trình `decide -> act -> observe -> answer`.
+- Agent loop nhận 2-3 read-only tools, chọn tool theo tên/mô tả, lưu state ngắn hạn gồm question, observations, audit log và số tool calls.
+- Thêm giới hạn `maxIterations`, `timeoutMs`, `maxToolCalls` và `maxObservationCharacters`; agent luôn dừng với `stopReason` rõ ràng khi vượt budget.
+- Mỗi tool call ghi audit log gồm iteration, toolName, status, input và observation/error.
+- `sanitizeToolObservation()` coi tool result là untrusted data, cắt độ dài và loại bỏ một số instruction độc hại kiểu “ignore previous instructions” để minh họa chống indirect prompt injection.
+- Thêm `backend/src/scripts/agent-loop-lab.ts` và script `npm run learn:agent-loop`; lab in kết quả agent bình thường và ví dụ tool result độc hại bị xử lý như dữ liệu.
+- Thêm `backend/docs/12_AGENT_LOOP_FROM_FIRST_PRINCIPLES.md` giải thích agent loop, deterministic workflow, state/memory/planning/tool selection, budget, human-in-the-loop, excessive agency và audit log.
+- Thêm test trong `backend/tests/agent.test.ts` kiểm chứng decide/act/observe/answer, budget exceeded và tool result độc hại không trở thành instruction.
+- Kiểm chứng: `npm run typecheck` thành công; targeted tests `tests/ingestion.test.ts tests/rag.test.ts tests/agent.test.ts` có 30 test pass; `npm run learn:rag-evaluation` thành công; `npm run learn:agent-loop` thành công; `npm test` có 101 test pass; `npm run build` thành công sau khi chạy ngoài sandbox vì `backend/dist` cũ bị EPERM khi ghi đè.
+- Hoàn thành toàn bộ checklist Tuần 8.
+- Task tiếp theo: bắt đầu Tuần 9, chuyển agent loop sang LangGraph.js, thiết kế state graph, node, edge và conditional edge.
 
 ## Session Notes Template
 

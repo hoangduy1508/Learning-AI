@@ -11,6 +11,7 @@ import {
 import type { AppConfig } from "./config.js";
 import type { ConversationRepository } from "./conversations/repository.js";
 import { registerFileRoutes } from "./filesystem/routes.js";
+import { InMemoryIngestionJobStore } from "./ingestion/jobs.js";
 import { IngestionPipeline } from "./ingestion/pipeline.js";
 import { validateIngestionUpload } from "./ingestion/upload.js";
 import { InMemoryIngestionVersionStore } from "./ingestion/versioning.js";
@@ -77,7 +78,9 @@ export function buildApp(
     options.ingestionPipeline ??
     new IngestionPipeline(new InMemoryVectorRepository(), {
       embeddingDimension: 32,
+      embeddingBatchSize: 16,
       chunking: { maxCharacters: 1_000, overlapCharacters: 120 },
+      jobStore: new InMemoryIngestionJobStore(),
       versionStore: new InMemoryIngestionVersionStore()
     });
   const ingestionMaxFileBytes = config?.INGESTION_MAX_FILE_BYTES ?? 1_000_000;
@@ -85,9 +88,7 @@ export function buildApp(
   app.get("/health", async () => ({ status: "ok" }));
   if (config) {
     registerFileRoutes(app, config);
-    if (config.LLM_PROVIDER === "gemini" && config.GEMINI_API_KEY) {
-      registerAgentRoutes(app, config);
-    }
+    registerAgentRoutes(app, config);
   }
 
   app.post("/api/ingestion/upload", async (request, reply) => {
@@ -102,11 +103,13 @@ export function buildApp(
         mime_type: upload.source.mimeType,
         size_bytes: upload.sizeBytes,
         document_id: result.documentId,
+        job_id: result.jobId,
         chunk_count: result.chunkCount,
         page_count: result.pageCount,
         checksum: result.checksum,
         version: result.version,
-        status: result.status
+        status: result.status,
+        embedding_batch_count: result.embeddingBatchCount ?? 0
       };
     } catch (error) {
       if (error instanceof z.ZodError) {
